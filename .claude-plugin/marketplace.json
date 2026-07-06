@@ -1,16 +1,16 @@
 {
-  "name": "thetaray-agent-skills",
+  "name": "agentcore-skills",
   "version": "1.0.0",
-  "description": "ThetaRay skills for building and migrating AI agents on Amazon Bedrock AgentCore.",
+  "description": "Skills for building and migrating AI agents on Amazon Bedrock AgentCore.",
   "owner": {
-    "name": "ThetaRay"
+    "name": "Leon Melamud"
   },
   "plugins": [
     {
       "name": "agentcore",
       "version": "1.0.0",
       "source": "./",
-      "author": { "name": "ThetaRay" },
+      "author": { "name": "Leon Melamud" },
       "description": "Harness-first migration and lifecycle skill for Amazon Bedrock AgentCore — migrate coding-assistant agents/skills/MCP to managed harnesses + Strands runtimes, verified against CLI 0.22.0.",
       "keywords": ["amazon-bedrock", "bedrock-agentcore", "agentcore", "harness", "migration"]
     }

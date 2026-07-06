@@ -59,7 +59,7 @@ This repo is a Claude Code **plugin** that bundles the `agentcore` skill.
 
 ```
 /plugin marketplace add <owner>/agentcore-migration
-/plugin install agentcore@thetaray-agent-skills
+/plugin install agentcore@agentcore-skills
 ```
 
 **As a personal or project skill (copy the bundle):**
@@ -71,4 +71,4 @@ cp -r skills/agentcore .claude/skills/agentcore          # project (or .github/s
 
 ## License
 
-Internal use only.
+MIT — see [LICENSE](LICENSE).
