@@ -21,7 +21,7 @@ A **harness** is a fully managed, declaratively configured agent (see `harness.m
 agentcore create --project-name <name> --no-agent --skip-git
 ```
 
-> **Important — `agentcore create` overwrites `agentcore.json`:** back up a pre-generated config before `create`, restore after.
+> **Important — `agentcore create` makes a nested `./<project-name>/` scaffold** (verified 0.22.0); it does not initialize in place. Copy the pre-generated `agentcore.json`, `aws-targets.json`, and `app/` into the scaffold after creating it.
 
 Console-created harnesses are no longer a dead end: `agentcore export harness --arn <arn>` converts one into a CLI-managed Strands runtime (see `harness.md`).
 

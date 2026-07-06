@@ -97,7 +97,7 @@ agentcore-project/
 ├── agentcore/
 │   ├── agentcore.json        # harnesses[] + runtimes[] + credentials[] + gateways[]
 │   ├── aws-targets.json      # [{"name","account","region"}]
-│   └── cdk/                  # needs npm install before first deploy
+│   └── cdk/                  # provided by the `agentcore create` scaffold (Step 6)
 ├── app/
 │   ├── <harness-agent>/      # harness.json + system-prompt.md
 │   └── <code-agent>/         # main.py, model/load.py, pyproject.toml, skills/, scripts/
@@ -118,17 +118,19 @@ Generate `migration-report.md`: summary table (counts by artifact type and statu
 
 ## Step 6 — Deploy
 
-Follow `migration-modes.md`. Short form:
+Follow `migration-modes.md`. Short form (or just run `agentcore-commands.sh`, which contains exactly this):
 
 ```bash
 cd <output-dir>
-cp agentcore/agentcore.json agentcore/agentcore.json.bak   # create overwrites config
+# create makes a NESTED ./<name>/ scaffold (with CDK deps installed) — copy generated files in
 agentcore create --project-name <name> --no-agent --skip-git
-cp agentcore/agentcore.json.bak agentcore/agentcore.json
-cd agentcore/cdk && npm install && cd ../..
+cp agentcore/agentcore.json <name>/agentcore/agentcore.json
+cp agentcore/aws-targets.json <name>/agentcore/aws-targets.json
+cp -R app <name>/
+cd <name>
+agentcore add skill --harness <h> --path app/<h>/skills/<skill>   # per generated skill
 agentcore validate
-bash agentcore-commands.sh      # or run credential/skill/gateway commands individually
-agentcore deploy
+agentcore deploy --yes
 agentcore invoke --harness <name> "test"   # or --runtime <name> for code agents
 ```
 

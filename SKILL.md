@@ -66,7 +66,7 @@ Project layout (ground truth, CLI 0.22.0):
 │   ├── aws-targets.json      # ARRAY of {name, account (12-digit string), region}
 │   ├── .env.local            # Gitignored secrets
 │   ├── .llm-context/         # TypeScript schema types — the schema authority; read these before editing JSON by hand
-│   └── cdk/                  # CDK project (npm install required before first deploy)
+│   └── cdk/                  # CDK project (deps installed by create unless --skip-install)
 └── app/
     ├── <harness>/            # harness.json + system-prompt.md (no code)
     └── <agent>/              # main.py, pyproject.toml, model/, skills/, mcp_client/ (code agent)
@@ -98,8 +98,7 @@ python3 scripts/generate_project.py --inventory migration-inventory.json --outpu
 - **`.llm-context/` is the schema authority** — when editing `agentcore.json`/`harness.json` by hand, conform to the TypeScript types there, then `agentcore validate`.
 - **Never put secrets in generated files** — API keys → Identity credentials (`agentcore add credential`), or reference an existing Secrets Manager ARN. Non-secrets → `envVars`.
 - **Renaming a resource destroys and recreates it** — the `name` field is the CloudFormation logical ID.
-- **`npm install` in `agentcore/cdk/`** before first deploy, or deploy fails with `tsc: not found`.
-- **`agentcore create` overwrites `agentcore.json`** — back up a pre-generated config, create with `--no-agent`, restore.
+- **`agentcore create` makes a NESTED `./<project-name>/` scaffold** — it does not initialize in place. For pre-generated configs: create with `--no-agent`, then copy `agentcore.json`/`aws-targets.json`/`app/` into the scaffold. The scaffold includes CDK `node_modules` (unless `--skip-install`); if deploy fails with `tsc: not found`, run `npm install` in `agentcore/cdk/`.
 - **Don't `add agent` for runtimes already in `agentcore.json`** — fails with "already exists". `add` commands are for adding NEW resources.
 - **aws-targets.json is a JSON array** — `[{"name","account","region"}]`, `account` is the 12-digit ID string (not `accountId`).
 - **Naming**: harness/agent names alphanumeric+underscores, start with letter, ≤48 chars; project names alphanumeric only, ≤23 chars; gateway names alphanumeric+hyphens.
@@ -131,6 +130,7 @@ Limitations documented by earlier migrations that AWS has since fixed — do not
 | `ThrottlingException` (tokens/day) | Request increase via Service Quotas → Amazon Bedrock |
 | `ModelNotAccessibleException` | Enable model access in Bedrock Console, or switch `modelId` to `amazon.nova-lite-v1:0` |
 | `agentcore create` outputs nothing | Invalid project name — alphanumeric only, ≤23 chars |
+| Harness invoke: `fetch failed` (UND_ERR_CONNECT_TIMEOUT) after ~10s | Node fetch tries only the FIRST DNS record of `bedrock-agentcore.<region>.amazonaws.com`; if that IP is unreachable from your network it times out (curl/Python fall back to other records and work). Test per-IP with `curl --resolve`; fix DNS/egress or invoke via `aws bedrock-agentcore invoke-agent-runtime` |
 | Stdio MCP server | No direct support — see MCP mapping in `references/agentcore-mappings.md` |
 
 ## Bundled Resources

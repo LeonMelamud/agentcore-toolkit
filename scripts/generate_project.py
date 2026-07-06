@@ -594,14 +594,14 @@ def generate_agentcore_commands(inventory: dict, repo_root: Path) -> str:
         "# Review placeholders before running. Generated from migration-inventory.json.",
         "# Run from the generated project directory.",
         "",
-        "# ──── Initialize project scaffold (CDK) ────",
-        "# `agentcore create` overwrites agentcore.json — back up and restore.",
-        "cp agentcore/agentcore.json agentcore/agentcore.json.bak",
+        "# ──── Initialize project scaffold ────",
+        f"# `agentcore create` makes a NESTED ./{project_name}/ scaffold (CDK deps included);",
+        "# copy the generated config and app files into it.",
         f"agentcore create --project-name {project_name} --no-agent --skip-git",
-        "cp agentcore/agentcore.json.bak agentcore/agentcore.json",
-        "",
-        "# ──── CDK dependencies (required before first deploy) ────",
-        "(cd agentcore/cdk && npm install)",
+        f"cp agentcore/agentcore.json {project_name}/agentcore/agentcore.json",
+        f"cp agentcore/aws-targets.json {project_name}/agentcore/aws-targets.json",
+        f"cp -R app {project_name}/",
+        f"cd {project_name}",
     ]
 
     # Skills → harness mounts

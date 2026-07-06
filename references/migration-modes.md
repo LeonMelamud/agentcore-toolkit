@@ -25,34 +25,35 @@ python3 scripts/generate_project.py \
 
 ## Deploy Workflow
 
+Verified against CLI 0.22.0: `agentcore create` does NOT initialize in place — it creates a **nested `./<project-name>/` scaffold** (agentcore/, cdk/ with node_modules, .llm-context/, AGENTS.md). Copy the generated files into it.
+
 ```bash
 cd agentcore-project
 
-# 1. Initialize project scaffold (CDK). create OVERWRITES agentcore.json — back up first.
-cp agentcore/agentcore.json agentcore/agentcore.json.bak
+# 1. Create the scaffold (nested dir; installs CDK deps unless --skip-install)
 agentcore create --project-name <project> --no-agent --skip-git
-cp agentcore/agentcore.json.bak agentcore/agentcore.json
 
-# 2. Install CDK dependencies (REQUIRED before first deploy)
-cd agentcore/cdk && npm install && cd ../..
+# 2. Copy generated config + apps into the scaffold
+cp agentcore/agentcore.json <project>/agentcore/agentcore.json
+cp agentcore/aws-targets.json <project>/agentcore/aws-targets.json
+cp -R app <project>/
+cd <project>
 
-# 3. Validate
-agentcore validate
-
-# 4. Credentials, skills, gateways (or run agentcore-commands.sh)
+# 3. Skills, credentials, gateways (or run ../agentcore-commands.sh)
+agentcore add skill --harness <n> --path app/<n>/skills/<skill>
 agentcore add credential --type api-key --name <name> --api-key "$SECRET"
-agentcore add skill --harness <n> --path <skill-dir>
 agentcore add gateway --name <gateway>
 agentcore add gateway-target --name <target> --type mcp-server --endpoint <url> --gateway <gateway>
 
-# 5. Deploy
-agentcore deploy
+# 4. Validate & deploy
+agentcore validate
+agentcore deploy --yes
 
-# 6. Test
-agentcore invoke --agent <name> "test"
+# 5. Test
+agentcore invoke --harness <name> "test"   # or --runtime <name> for code agents
 ```
 
-> **Critical: `npm install` in `agentcore/cdk/`** — skip it and `agentcore deploy` fails with `tsc: not found`.
+> If deploy fails with `tsc: not found`, CDK deps are missing: `cd agentcore/cdk && npm install`.
 
 ## What `agentcore deploy` Creates
 
@@ -106,6 +107,7 @@ aws cloudformation wait stack-delete-complete --stack-name AgentCore-<projectnam
 | `ModelNotAccessibleException` | Model access not enabled in account | Enable in Bedrock Console → Model access, or switch to `amazon.nova-lite-v1:0` |
 | `agentcore create` outputs nothing | Invalid project name | Alphanumeric only, start with letter, max 23 chars |
 | Docker Hub rate limits (Container) | CodeBuild pulls throttled | Use ECR Public Gallery base images |
+| Harness invoke `fetch failed` (~10s) | Node fetch only tries the first DNS record of the data-plane host; that IP unreachable from your network | Check per-IP: `curl --resolve bedrock-agentcore.<region>.amazonaws.com:443:<ip> https://...`; fix DNS/egress, retry from another network, or invoke the harness's underlying runtime with `aws bedrock-agentcore invoke-agent-runtime` |
 
 ## Model Selection
 

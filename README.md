@@ -1,10 +1,8 @@
-# AgentCore Migration Skill
+# AgentCore Skill
 
-Migrate AI assistant configurations from 14+ coding assistants to Amazon Bedrock AgentCore Runtime, Gateway, Identity, and Registry project scaffolds.
+General skill for Amazon Bedrock AgentCore: deploy and operate harnesses and runtime agents, and migrate AI assistant configurations from 15 coding assistants (GitHub Copilot, Claude Code, Cursor, Cline, Codex, Windsurf, Antigravity, Gemini CLI, Deep Agents, Dexto, Firebender, Kimi Code CLI, OpenCode, Warp, agentic-core).
 
-## Supported Sources
-
-GitHub Copilot, Claude Code, Cursor, Cline, Codex, Windsurf, Antigravity, Gemini CLI, Deep Agents, Dexto, Firebender, Kimi Code CLI, OpenCode, Warp, agentic-core.
+**Harness-first:** agents that are persona + skills + standard tools deploy as declarative harnesses (no code). Only agents with custom logic get generated Strands code. Verified against `agentcore` CLI 0.22.0 (July 2026).
 
 ## Quick Start
 
@@ -14,58 +12,52 @@ GitHub Copilot, Claude Code, Cursor, Cline, Codex, Windsurf, Antigravity, Gemini
 python3 scripts/preflight_check.py
 ```
 
-### 1. Scan repository
+Needs: Python ≥3.10, Node ≥20, uv, AWS CLI + credentials, `agentcore` CLI ≥0.22.
+
+### Migration
 
 ```bash
+# 1. Scan a repository for AI assistant configs
 python3 scripts/scan_configs.py --repo-root <path> --format json
-```
 
-### 2. Generate AgentCore project
-
-```bash
+# 2. Generate the AgentCore project (harnesses + code runtimes)
 python3 scripts/generate_project.py \
   --inventory migration-inventory.json \
   --output-dir ./agentcore-project \
   --region us-east-1
-```
 
-### 3. Deploy
-
-```bash
+# 3. Deploy (or run the generated agentcore-commands.sh)
 cd agentcore-project
-agentcore create --defaults
-cd agentcore/cdk && npm install && cd ../..
-agentcore validate
-agentcore deploy
+./agentcore-commands.sh
 ```
 
 ## Structure
 
 ```
-├── SKILL.md           # Skill instructions (for AI assistant integration)
-├── scripts/           # Migration automation scripts
-│   ├── preflight_check.py   # Verify prerequisites
-│   ├── scan_configs.py      # Scan repo for AI configs
-│   └── generate_project.py  # Generate AgentCore project
-├── references/        # Mapping docs and templates
-│   ├── source-formats.md
-│   ├── agentcore-mappings.md
-│   ├── migration-modes.md
+├── SKILL.md                     # General AgentCore skill (entry point)
+├── scripts/
+│   ├── preflight_check.py       # Verify prerequisites
+│   ├── scan_configs.py          # Scan repo for AI configs → inventory
+│   └── generate_project.py      # Inventory → AgentCore project (harness-first)
+├── references/
+│   ├── harness.md               # Harness commands, schema, skills, export-to-code
+│   ├── migration.md             # Migration workflow
+│   ├── source-formats.md        # Per-tool detection/parsing rules
+│   ├── agentcore-mappings.md    # Mapping rules
+│   ├── migration-modes.md       # Deploy workflow, errors, teardown
 │   └── templates/
-└── assets/            # POC examples
-    └── poc-cve-verify/
+└── assets/
+    └── poc-cve-verify/          # Worked migration example
 ```
 
 ## Installing as a Skill
 
-To use this as a skill in your AI assistant:
-
 ```bash
-# In your project, copy the skill:
-cp -r <this-repo> .github/skills/agentcore-migration/
+# Claude Code (project-level)
+cp -r <this-repo> .claude/skills/agentcore/
+# or GitHub Copilot
+cp -r <this-repo> .github/skills/agentcore/
 ```
-
-Or reference it directly from your agent's `skills:` frontmatter.
 
 ## License
 
