@@ -91,9 +91,15 @@ def flatten_persona_to_prompt(agent: dict[str, Any]) -> str:
 
     body = agent.get("body", "")
     body = re.sub(r"##\s*Persona\s*\n.*?(?=\n##\s|\Z)", "", body, flags=re.DOTALL)
+    # Drop the leading H1 title (e.g. "# CVE Triage") — it's the agent name, already implied.
+    body = re.sub(r"^\s*#\s+.*\n", "", body)
     body = body.strip()
     if body:
-        parts.append(f"\n## Instructions\n{body}")
+        # If the body already carries its own "## Instructions" heading, don't double it.
+        if re.match(r"##\s*Instructions\b", body, re.IGNORECASE):
+            parts.append(f"\n{body}")
+        else:
+            parts.append(f"\n## Instructions\n{body}")
 
     return "\n".join(parts).strip()
 

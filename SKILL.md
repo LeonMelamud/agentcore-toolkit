@@ -139,6 +139,7 @@ Limitations documented by earlier migrations that AWS has since fixed — do not
 - `scripts/preflight_check.py` — verify all prerequisites
 - `scripts/scan_configs.py` — scan a repo for 15 AI-assistant config formats → `migration-inventory.json`
 - `scripts/generate_project.py` — generate an AgentCore project (harnesses + code runtimes) from the inventory
+- `scripts/invoke_harness.py` — boto3 fallback for `agentcore invoke --harness` when the CLI hits `fetch failed`
 
 ### References
 - `references/harness.md` — harness commands, `harness.json` schema, skills, export-to-code

@@ -123,3 +123,11 @@ agentcore dev "prompt"                                        # local run (code 
 ```
 
 Harness invocations accept per-call overrides (`--model-id`, `--system-prompt`, `--skills`, `--allowed-tools`, …) — useful for testing config changes before deploying them.
+
+**If `agentcore invoke --harness` fails with `fetch failed`** (Node fetch only tries the first DNS record of the data-plane host; unreachable from some networks), use the boto3 fallback — it falls back across all records:
+
+```bash
+uv run --with 'boto3>=1.43' scripts/invoke_harness.py --arn <harness-arn> --prompt "test"
+```
+
+`invoke_harness` (boto3 `bedrock-agentcore`) takes `harnessArn`, `runtimeSessionId`, `messages`, and returns a Converse-style event `stream`.
