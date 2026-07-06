@@ -103,8 +103,8 @@ aws cloudformation wait stack-delete-complete --stack-name AgentCore-<projectnam
 | "already exists" from `add` | Resource already declared in config | Edit JSON directly |
 | Stack already exists | Previous deployment | `aws cloudformation delete-stack ...` |
 | IAM permission denied | Missing permissions | Need CloudFormation, ECR, IAM, Bedrock AgentCore permissions |
-| `ThrottlingException: Too many tokens` | Bedrock token quota | Request increase via Service Quotas |
-| `ModelNotAccessibleException` | Model access not enabled in account | Enable in Bedrock Console → Model access, or switch to `amazon.nova-lite-v1:0` |
+| `ThrottlingException: Too many tokens per day` | Bedrock daily token quota — **may be 0 by default** even after model access is granted | `aws service-quotas list-service-quotas --service-code bedrock --query "Quotas[?contains(QuotaName,'tokens per day')]"`; request an increase via Service Quotas (AWS-approved, not instant) |
+| `ModelNotAccessibleException` / "use case details have not been submitted" | Model access not enabled | Enable via console Model access, or CLI: `aws bedrock put-use-case-for-model-access` (Anthropic form; `intendedUsers` is a numeric string, `industryOption` from a fixed enum e.g. "Technology") + `create-foundation-model-agreement`; propagation takes ~15 min. Or switch to `amazon.nova-lite-v1:0` |
 | `agentcore create` outputs nothing | Invalid project name | Alphanumeric only, start with letter, max 23 chars |
 | Docker Hub rate limits (Container) | CodeBuild pulls throttled | Use ECR Public Gallery base images |
 | Harness invoke `fetch failed` (~10s) | Node fetch only tries the first DNS record of the data-plane host; that IP unreachable from your network | Check per-IP: `curl --resolve bedrock-agentcore.<region>.amazonaws.com:443:<ip> https://...`; fix DNS/egress, retry from another network, or invoke the harness's underlying runtime with `aws bedrock-agentcore invoke-agent-runtime` |

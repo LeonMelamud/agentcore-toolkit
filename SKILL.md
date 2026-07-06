@@ -127,7 +127,7 @@ Limitations documented by earlier migrations that AWS has since fixed — do not
 | `tsc: not found` on deploy | `cd agentcore/cdk && npm install` |
 | "already exists" from `add agent` | Resource already in `agentcore.json` — edit the JSON instead |
 | Deploy fails: stack already exists | `aws cloudformation delete-stack --stack-name AgentCore-<project>-default` |
-| `ThrottlingException` (tokens/day) | Request increase via Service Quotas → Amazon Bedrock |
+| `ThrottlingException: Too many tokens per day` | Bedrock **daily token quota** — often **0 by default** on new/restricted accounts even after model access is granted. Check `aws service-quotas list-service-quotas --service-code bedrock --query "Quotas[?contains(QuotaName,'tokens per day')]"`; request an increase via Service Quotas → Amazon Bedrock (AWS-approved, not instant) |
 | `ModelNotAccessibleException` | Enable model access in Bedrock Console, or switch `modelId` to `amazon.nova-lite-v1:0` |
 | `agentcore create` outputs nothing | Invalid project name — alphanumeric only, ≤23 chars |
 | Harness invoke: `fetch failed` (UND_ERR_CONNECT_TIMEOUT) after ~10s | Node fetch tries only the FIRST DNS record of `bedrock-agentcore.<region>.amazonaws.com`; if that IP is unreachable from your network it times out (curl/Python fall back to other records and work). Test per-IP with `curl --resolve`; fix DNS/egress or invoke via `aws bedrock-agentcore invoke-agent-runtime` |
