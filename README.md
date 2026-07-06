@@ -4,6 +4,8 @@ General skill for Amazon Bedrock AgentCore: deploy and operate harnesses and run
 
 **Harness-first:** agents that are persona + skills + standard tools deploy as declarative harnesses (no code). Only agents with custom logic get generated Strands code. Verified against `agentcore` CLI 0.22.0 (July 2026).
 
+The plugin also bundles companion AWS skills — `aws-cloudformation`, `aws-expert`, `aws-serverless`, `aws-skills`, `aws-solution-architect` — so a coding agent has broader AWS context when building or migrating agents.
+
 ## Quick Start
 
 ### Prerequisites
@@ -33,24 +35,25 @@ cd agentcore-project
 
 ## Structure
 
-This repo is a Claude Code **plugin** that bundles the `agentcore` skill.
+This repo is a Claude Code **plugin** that bundles the `agentcore` skill plus a set of companion AWS skills (all auto-discovered from `skills/`).
 
 ```
 ├── .claude-plugin/
 │   ├── plugin.json              # Plugin manifest
 │   └── marketplace.json         # Marketplace manifest (installable via /plugin)
-└── skills/agentcore/            # The skill
-    ├── SKILL.md                 # Entry point
-    ├── scripts/
-    │   ├── preflight_check.py   # Verify prerequisites
-    │   ├── scan_configs.py      # Scan repo for AI configs → inventory
-    │   ├── generate_project.py  # Inventory → AgentCore project (harness-first)
-    │   └── invoke_harness.py    # boto3 invoke fallback
-    ├── references/              # harness.md, migration.md, security-iam.md, deployment-checklist.md, ...
-    ├── evals/evals.json         # Regression scenarios (self-test)
-    └── assets/
-        ├── poc-cve-verify/      # Worked migration example (+ VERIFIED.md)
-        └── iam-policies/        # Least-privilege trust + permissions templates
+├── skills/
+│   ├── aws-cloudformation/      # CloudFormation authoring
+│   ├── aws-expert/              # General AWS guidance
+│   ├── aws-serverless/          # Serverless (Lambda/API GW) patterns
+│   ├── aws-skills/              # AWS skills index
+│   ├── aws-solution-architect/  # Architecture guidance
+│   └── agentcore/               # The AgentCore migration skill
+│       ├── SKILL.md             # Entry point
+│       ├── scripts/             # preflight_check, scan_configs, generate_project, invoke_harness
+│       ├── references/          # harness.md, migration.md, security-iam.md, deployment-checklist.md, ...
+│       ├── evals/evals.json     # Regression scenarios (self-test)
+│       └── assets/              # poc-cve-verify/ (+ VERIFIED.md), iam-policies/
+└── LICENSE                      # MIT
 ```
 
 ## Installing
