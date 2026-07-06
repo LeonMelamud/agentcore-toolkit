@@ -1,17 +1,20 @@
 # Migration Modes Reference
 
-The AgentCore migration creates a **new CDK-managed AgentCore project** using **CodeZip** build (serverless — no Docker needed). The `agentcore` CLI manages the full deployment lifecycle through CloudFormation.
+The migration creates a **new CDK-managed AgentCore project**. Two target modes per agent (chosen in mapping — see `migration.md` Step 3):
 
-## Build Types
+| Mode | What gets generated | Deploys as |
+|------|---------------------|-----------|
+| **Harness** (default) | `app/<name>/harness.json` + `system-prompt.md` | Managed harness — no code, no build |
+| **Code runtime** | `app/<name>/main.py` + `model/` + `pyproject.toml` | CodeZip (default) or Container |
+
+## Build Types (code runtimes only)
 
 | Build | When to use | Docker needed? |
 |-------|-------------|----------------|
 | **CodeZip** (default) | Pure Python agents with pip dependencies | No |
-| **Container** | Agents needing system packages, non-Python tools, custom OS deps | Yes |
+| **Container** | System packages, non-Python tools, custom OS deps | Yes |
 
-CodeZip is preferred — it's faster to deploy, doesn't require Docker locally or CodeBuild, and uses the managed Python 3.14 runtime.
-
-## CLI Flags
+## Generator CLI Flags
 
 ```
 python3 scripts/generate_project.py \
@@ -20,36 +23,15 @@ python3 scripts/generate_project.py \
   --region <region>           # AWS region (default: us-west-2)
 ```
 
-## What Gets Generated
-
-```
-agentcore-project/
-├── agentcore/
-│   ├── agentcore.json        # runtimes[] — CodeZip build, Python 3.14
-│   ├── aws-targets.json      # JSON array: [{"name","account","region"}]
-│   └── cdk/                  # CDK project (auto-generated on first deploy)
-├── app/<agent>/              # One directory per agent
-│   ├── main.py               # Strands Agent entrypoint (BedrockAgentCoreApp)
-│   ├── model/load.py         # BedrockModel loader (Nova Lite default)
-│   ├── pyproject.toml        # Dependencies (strands-agents, bedrock-agentcore)
-│   ├── runtime-metadata.json # Review: systemPrompt, tools, env
-│   ├── scripts/              # Migrated scripts
-│   └── skills/               # Declared skills baked into package
-├── agentcore-commands.sh     # Create project + credentials + gateways + deploy
-└── migration-report.md       # Summary + manual action items
-```
-
 ## Deploy Workflow
 
 ```bash
 cd agentcore-project
 
-# 1. Initialize: creates local project structure + CDK scaffold
-agentcore create --defaults
-# If agentcore.json was pre-generated, back it up first:
-#   cp agentcore/agentcore.json agentcore/agentcore.json.bak
-#   agentcore create --name <project> --no-agent
-#   cp agentcore/agentcore.json.bak agentcore/agentcore.json
+# 1. Initialize project scaffold (CDK). create OVERWRITES agentcore.json — back up first.
+cp agentcore/agentcore.json agentcore/agentcore.json.bak
+agentcore create --project-name <project> --no-agent --skip-git
+cp agentcore/agentcore.json.bak agentcore/agentcore.json
 
 # 2. Install CDK dependencies (REQUIRED before first deploy)
 cd agentcore/cdk && npm install && cd ../..
@@ -57,44 +39,39 @@ cd agentcore/cdk && npm install && cd ../..
 # 3. Validate
 agentcore validate
 
-# 4. Add credentials and gateways (or run agentcore-commands.sh)
+# 4. Credentials, skills, gateways (or run agentcore-commands.sh)
 agentcore add credential --type api-key --name <name> --api-key "$SECRET"
+agentcore add skill --harness <n> --path <skill-dir>
 agentcore add gateway --name <gateway>
 agentcore add gateway-target --name <target> --type mcp-server --endpoint <url> --gateway <gateway>
 
-# 5. Deploy to AWS
+# 5. Deploy
 agentcore deploy
 
 # 6. Test
-agentcore invoke --runtime <agent> --prompt "test"
+agentcore invoke --agent <name> "test"
 ```
 
-> **Critical: `npm install` in `agentcore/cdk/`** — The CDK project requires `node_modules` before the first deploy. If you skip this, `agentcore deploy` fails with `tsc: not found`.
-
-> **Critical: `agentcore create` overwrites `agentcore.json`** — Back up and restore if you have a pre-generated config.
+> **Critical: `npm install` in `agentcore/cdk/`** — skip it and `agentcore deploy` fails with `tsc: not found`.
 
 ## What `agentcore deploy` Creates
 
-The deploy command creates a CloudFormation stack (named `AgentCore-<projectname>-default`) containing:
+CloudFormation stack `AgentCore-<projectname>-default`:
 
 | Resource | Purpose |
 |---|---|
-| Agent Runtimes | The actual AgentCore Runtime resources (CodeZip or Container) |
-| IAM Roles | Service roles for runtime execution |
-| ECR Repository | (Container build only) Stores built container images |
-| CodeBuild Project | (Container build only) Builds Docker images |
+| Harnesses | Managed harness resources |
+| Agent Runtimes | CodeZip or Container runtimes |
+| IAM Roles | Service roles for execution |
+| ECR Repository + CodeBuild | Container builds only |
 
 ## aws-targets.json Format
 
-**Must be a JSON array** (not an object). Field is `"account"` not `"accountId"`:
+**JSON array**, `account` (not `accountId`) is the 12-digit account ID string:
 
 ```json
 [
-  {
-    "name": "default",
-    "account": "123456789012",
-    "region": "us-east-1"
-  }
+  { "name": "default", "account": "123456789012", "region": "us-east-1" }
 ]
 ```
 
@@ -102,17 +79,14 @@ The deploy command creates a CloudFormation stack (named `AgentCore-<projectname
 
 | Check | Expected |
 |---|---|
-| `agentcore.json` runtimes[] | Must have ≥1 entry (one per agent) |
-| `agentcore.json` build field | `"CodeZip"` (default) or `"Container"` |
-| `aws-targets.json` | JSON **array** with `"account"` field (not "accountId") |
-| `agentcore/cdk/node_modules` | Exists (run `npm install` in `agentcore/cdk/`) |
-| `agentcore validate` | Passes with no errors |
-| App directories | One per agent, each with `main.py`, `pyproject.toml` |
-| `model/load.py` | Uses `amazon.nova-lite-v1:0` or another available model |
+| `agentcore.json` | ≥1 entry across `harnesses[]` + `runtimes[]`; conforms to `.llm-context/` types |
+| `harness.json` per harness | name, model, tools[], skills[], memory block |
+| `aws-targets.json` | JSON **array** with `account` field |
+| `agentcore/cdk/node_modules` | Exists |
+| `agentcore validate` | Passes |
+| Code-agent dirs | `main.py` + `pyproject.toml` each |
 
 ## Teardown
-
-To remove all deployed resources:
 
 ```bash
 aws cloudformation delete-stack --stack-name AgentCore-<projectname>-default --region <region>
@@ -123,36 +97,22 @@ aws cloudformation wait stack-delete-complete --stack-name AgentCore-<projectnam
 
 | Error | Cause | Fix |
 |---|---|---|
-| `tsc: not found` during deploy | CDK deps not installed | Run `cd agentcore/cdk && npm install` |
-| `agentcore validate` fails | Missing runtimes in `agentcore.json` | Restore the backed-up `agentcore.json` |
-| Deploy fails: stack already exists | Previous deployment | Delete stack: `aws cloudformation delete-stack --stack-name <name>` |
-| Deploy fails: IAM permission denied | Missing permissions | Need CloudFormation, ECR, IAM, Bedrock AgentCore permissions |
-| `ThrottlingException: Too many tokens per day` | Daily Bedrock token quota exhausted | Wait for quota reset (midnight UTC) or request increase via Service Quotas |
-| Claude `ModelNotAccessibleException` | Anthropic models require use-case form | Switch to Nova Lite (`amazon.nova-lite-v1:0`) or submit form in Bedrock Console |
-| `agentcore create` outputs nothing | Project name invalid | Use alphanumeric only, start with letter, max 23 chars |
-| Console harness locked | Harness-managed runtime | Cannot update — create a new CDK-managed project instead |
-| Docker Hub rate limits (Container build) | CodeBuild pulls throttled | Use ECR Public Gallery base images |
+| `tsc: not found` during deploy | CDK deps not installed | `cd agentcore/cdk && npm install` |
+| `agentcore validate` fails | Config drift | Restore backed-up `agentcore.json`; check `.llm-context/` types |
+| "already exists" from `add` | Resource already declared in config | Edit JSON directly |
+| Stack already exists | Previous deployment | `aws cloudformation delete-stack ...` |
+| IAM permission denied | Missing permissions | Need CloudFormation, ECR, IAM, Bedrock AgentCore permissions |
+| `ThrottlingException: Too many tokens` | Bedrock token quota | Request increase via Service Quotas |
+| `ModelNotAccessibleException` | Model access not enabled in account | Enable in Bedrock Console → Model access, or switch to `amazon.nova-lite-v1:0` |
+| `agentcore create` outputs nothing | Invalid project name | Alphanumeric only, start with letter, max 23 chars |
+| Docker Hub rate limits (Container) | CodeBuild pulls throttled | Use ECR Public Gallery base images |
 
 ## Model Selection
 
-| Model | Access | Quality | Daily Quota |
-|-------|--------|---------|-------------|
-| `amazon.nova-lite-v1:0` | Available immediately | Good for testing | Low default — request increase |
-| `amazon.nova-pro-v1:0` | Available immediately | Better quality | Low default — request increase |
-| `us.anthropic.claude-sonnet-4-6-20250514-v1:0` | Requires use-case form | Best quality | Higher once approved |
+| Model | Notes |
+|-------|-------|
+| `global.anthropic.claude-sonnet-4-6` | Harness default (CLI 0.22.0) |
+| `global.anthropic.claude-sonnet-4-5-20250929-v1:0` | Code-agent template default |
+| `amazon.nova-lite-v1:0` / `amazon.nova-pro-v1:0` | Fallback if Anthropic model access is not enabled; low default daily quotas |
 
-> **Recommendation:** Start with Nova Lite for deployment validation, then upgrade to Claude once access is approved.
-
-## Known AWS Limitation: Console-Created Harnesses
-
-Runtimes created via the **AWS Console** (Bedrock → AgentCore → Harness) are **harness-managed** and **cannot be updated** through any public CLI or API:
-
-| Approach Tested | Result |
-|---|---|
-| `agentcore import runtime` | CloudFormation IMPORT fails — CDK cannot import harness-managed resources |
-| `aws bedrock-agentcore-control update-agent-runtime` | API returns: *"This agent runtime is managed by harness '...' and cannot be updated directly. Use UpdateHarness to update this resource."* |
-| `aws bedrock-agentcore-control update-harness` | API does not exist in the public CLI |
-
-**Impact:** If you have a Console-created harness, this migration creates a **separate, new CDK-managed project**. The Console-created harness remains untouched.
-
-**Recommendation:** Use this migration skill to create all runtimes via CLI (`agentcore create` + `agentcore deploy`). CLI-created runtimes are fully manageable and updatable.
+More providers: harness `--model-provider open_ai | gemini | lite_llm` (LiteLLM/Bedrock Mantle expose OpenAI GPT models on Bedrock).
