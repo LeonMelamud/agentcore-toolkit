@@ -129,7 +129,7 @@ cd agentcore/cdk && npm install && cd ../..
 agentcore validate
 bash agentcore-commands.sh      # or run credential/skill/gateway commands individually
 agentcore deploy
-agentcore invoke --agent <name> "test"
+agentcore invoke --harness <name> "test"   # or --runtime <name> for code agents
 ```
 
 ## Validation Checkpoints

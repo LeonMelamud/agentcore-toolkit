@@ -116,7 +116,10 @@ Human-in-the-loop no longer requires custom infrastructure:
 ## Invoke
 
 ```bash
-agentcore invoke --agent <name> "prompt"           # deployed agent/harness endpoint
-agentcore dev "prompt"                             # local run (code agents)
-aws bedrock-agentcore invoke-agent-runtime ...     # raw API for runtimes
+agentcore invoke --harness <name> "prompt"                    # deployed harness
+agentcore invoke --harness-arn <arn> --region <r> "prompt"    # any harness by ARN, no project needed
+agentcore invoke --runtime <name> "prompt"                    # deployed code runtime
+agentcore dev "prompt"                                        # local run (code agents)
 ```
+
+Harness invocations accept per-call overrides (`--model-id`, `--system-prompt`, `--skills`, `--allowed-tools`, …) — useful for testing config changes before deploying them.

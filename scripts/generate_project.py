@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Generate an AgentCore project scaffold from a migration inventory.
 
+Harness-first: agents that are persona + skills + standard tools become
+declarative harnesses (app/<name>/harness.json + system-prompt.md). Agents
+that reference bundled scripts become Strands code runtimes (app/<name>/main.py).
+
 Usage:
     python3 generate_project.py \
         --inventory migration-inventory.json \
@@ -21,7 +25,10 @@ SECRET_PATTERNS = re.compile(
     r"(KEY|SECRET|TOKEN|PASSWORD|PASSCODE|CREDENTIAL|AUTH|USERCODE)", re.IGNORECASE
 )
 
-DEFAULT_MODEL_ID = "amazon.nova-lite-v1:0"
+# CLI 0.22.0 defaults (verified via `agentcore create` / `add agent` output)
+HARNESS_MODEL_ID = "global.anthropic.claude-sonnet-4-6"
+RUNTIME_MODEL_ID = "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
+FALLBACK_MODEL_ID = "amazon.nova-lite-v1:0"  # if Anthropic model access is not enabled
 
 
 # ---------------------------------------------------------------------------
@@ -47,7 +54,7 @@ def project_slugify(value: str) -> str:
 
 
 def env_vars_to_array(env_dict: dict[str, str]) -> list[dict[str, str]]:
-    """Convert env vars dict to AgentCore array format [{name, value}]."""
+    """Convert env vars dict to AgentCore runtime array format [{name, value}]."""
     return [{"name": k, "value": v} for k, v in env_dict.items()]
 
 
@@ -92,7 +99,7 @@ def flatten_persona_to_prompt(agent: dict[str, Any]) -> str:
 
 
 def map_allowed_tools(agent: dict[str, Any]) -> list[str]:
-    """Map source assistant tool names to AgentCore runtime categories."""
+    """Map source assistant tool names to AgentCore tool categories."""
     tool_map = {
         "read": "file_operations",
         "search": "file_operations",
@@ -147,21 +154,77 @@ def find_agent_script_refs(agent: dict[str, Any], repo_root: Path) -> list[Path]
     return paths
 
 
+def is_code_agent(agent: dict[str, Any], repo_root: Path) -> bool:
+    """Classify an agent: code runtime iff it bundles scripts it must execute.
+
+    Everything else (persona + skills + standard/MCP tools) becomes a harness.
+    """
+    return bool(find_agent_script_refs(agent, repo_root))
+
+
+def declared_skills(agent: dict[str, Any], skills: list[dict]) -> list[dict]:
+    """Return the skill records declared in the agent's `skills:` frontmatter."""
+    wanted = agent.get("frontmatter", {}).get("skills", [])
+    return [s for s in skills if s.get("name") in wanted] if wanted else []
+
+
+def copy_skill_dirs(matching_skills: list[dict], skills_dir: Path) -> list[str]:
+    """Copy skill source directories into skills_dir; return copied skill names."""
+    copied: list[str] = []
+    for skill in matching_skills:
+        source_file = Path(skill.get("source_file", ""))
+        skill_source_dir = source_file.parent if source_file.is_file() else None
+        if skill_source_dir and skill_source_dir.is_dir():
+            name = skill.get("name", skill_source_dir.name)
+            copy_tree(skill_source_dir, skills_dir / name)
+            copied.append(name)
+    return copied
+
+
 def copy_tree(src: Path, dst: Path) -> None:
     """Copy a directory tree, replacing any existing destination."""
     if dst.exists():
         shutil.rmtree(dst)
+    dst.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(src, dst)
 
 
 # ---------------------------------------------------------------------------
-# Generators
+# Harness generators (declarative agents)
+# ---------------------------------------------------------------------------
+
+def generate_harness_json(agent: dict[str, Any], mcp_servers: list[dict]) -> dict[str, Any]:
+    """Generate app/<name>/harness.json (schema verified against CLI 0.22.0).
+
+    Skills are attached afterwards via `agentcore add skill` (see commands script)
+    so the CLI normalizes paths; remote MCP tools are pre-populated here.
+    """
+    tools = [
+        {
+            "type": "remote_mcp",
+            "name": slugify(mcp.get("name", "mcp")),
+            "config": {"remoteMcp": {"url": mcp.get("url", "")}},
+        }
+        for mcp in mcp_servers
+        if not mcp.get("disabled") and mcp.get("transport") != "stdio" and mcp.get("url")
+    ]
+    return {
+        "name": slugify(agent.get("name", "unnamed")),
+        "model": {"provider": "bedrock", "modelId": HARNESS_MODEL_ID},
+        "tools": tools,
+        "skills": [],
+        "memory": {"mode": "disabled"},
+    }
+
+
+# ---------------------------------------------------------------------------
+# Code-runtime generators (custom-logic agents)
 # ---------------------------------------------------------------------------
 
 def generate_runtime_metadata(agent: dict[str, Any], mcp_servers: list[dict]) -> dict[str, Any]:
     """Generate reviewable metadata consumed by the migrated entrypoint."""
     return {
-        "modelId": DEFAULT_MODEL_ID,
+        "modelId": RUNTIME_MODEL_ID,
         "systemPrompt": flatten_persona_to_prompt(agent),
         "allowedTools": map_allowed_tools(agent),
         "mcpServers": [
@@ -170,7 +233,7 @@ def generate_runtime_metadata(agent: dict[str, Any], mcp_servers: list[dict]) ->
                 "transport": mcp.get("transport", "unknown"),
                 "url": mcp.get("url", ""),
                 "migrationStatus": "MANUAL" if mcp.get("transport") == "stdio" else "AUTO",
-                "note": "stdio MCP must be exposed through Gateway or a remote MCP endpoint"
+                "note": "stdio MCP must be exposed as a remote MCP endpoint or gateway target"
                 if mcp.get("transport") == "stdio" else "remote endpoint can become a Gateway target",
             }
             for mcp in mcp_servers
@@ -184,19 +247,22 @@ def generate_runtime_metadata(agent: dict[str, Any], mcp_servers: list[dict]) ->
 
 
 def generate_main_py(agent: dict[str, Any]) -> str:
-    """Generate a Strands-based AgentCore Runtime entrypoint with auto skill loading."""
+    """Generate a Strands AgentCore Runtime entrypoint (CLI 0.22.0 pattern).
+
+    Streaming entrypoint (stream_async + yield), per-session agent cache,
+    automatic skill loading from the baked skills/ directory.
+    """
     system_prompt = flatten_persona_to_prompt(agent)
     agent_name = agent.get("name", "agent")
     return f'''#!/usr/bin/env python3
 """AgentCore Runtime entrypoint for the migrated `{agent_name}` agent.
 
 This scaffold preserves the original assistant instructions in DEFAULT_SYSTEM_PROMPT.
-Skills are loaded automatically from the skills/ directory (baked into code package)
-or from .agent/skills/ (mounted by harness at runtime).
+Skills baked into the code package (skills/) are appended to the system prompt.
 """
 
+from collections import OrderedDict
 from pathlib import Path
-from typing import Any
 
 from strands import Agent
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
@@ -209,70 +275,56 @@ DEFAULT_SYSTEM_PROMPT = {system_prompt!r}
 
 
 def _discover_skills() -> str:
-    """Auto-discover and load skill files from available paths.
-
-    Checks two locations (in priority order):
-    1. .agent/skills/ — Harness-mounted skills (added via Console UI or config)
-    2. skills/ — Skills baked into the code package at build time
-    """
-    skill_dirs = [
-        Path("/app/.agent/skills"),   # Harness-mounted path
-        Path(__file__).parent / "skills",  # Baked into code package
-    ]
+    """Load SKILL.md content from the baked skills/ directory."""
+    skills_dir = Path(__file__).parent / "skills"
     skills_content: list[str] = []
-    seen: set[str] = set()
-
-    for skill_dir in skill_dirs:
-        if not skill_dir.is_dir():
-            continue
-        # Load SKILL.md from each skill subfolder, or direct .md files
-        for path in sorted(skill_dir.rglob("SKILL.md")):
+    if skills_dir.is_dir():
+        for path in sorted(skills_dir.rglob("SKILL.md")):
             name = path.parent.name
-            if name not in seen:
-                seen.add(name)
-                skills_content.append(f"\\n--- SKILL: {{name}} ---\\n{{path.read_text()}}")
-                log.info(f"Loaded skill: {{name}} from {{path}}")
-        for path in sorted(skill_dir.glob("*.md")):
-            name = path.stem
-            if name not in seen:
-                seen.add(name)
-                skills_content.append(f"\\n--- SKILL: {{name}} ---\\n{{path.read_text()}}")
-                log.info(f"Loaded skill: {{name}} from {{path}}")
-
+            skills_content.append(f"\\n--- SKILL: {{name}} ---\\n{{path.read_text()}}")
+            log.info(f"Loaded skill: {{name}} from {{path}}")
     return "\\n".join(skills_content)
 
 
-# Build final system prompt with skills injected
-_skills_text = _discover_skills()
-SYSTEM_PROMPT = DEFAULT_SYSTEM_PROMPT + (_skills_text if _skills_text else "")
-
-# Define tools used by the model
-tools = []
+SYSTEM_PROMPT = DEFAULT_SYSTEM_PROMPT + _discover_skills()
 
 # TODO: Add migrated tools here as @tool functions or MCP clients
+tools = []
 
 
-_agent = None
+# One Agent per session_id (best-effort in-process history; LRU-bounded).
+def _agent_factory():
+    cache: OrderedDict[str, Agent] = OrderedDict()
 
-
-def get_or_create_agent():
-    global _agent
-    if _agent is None:
-        _agent = Agent(
+    def get_or_create(session_id: str) -> Agent:
+        if session_id in cache:
+            cache.move_to_end(session_id)
+            return cache[session_id]
+        if len(cache) >= 128:
+            cache.popitem(last=False)
+        cache[session_id] = Agent(
             model=load_model(),
             system_prompt=SYSTEM_PROMPT,
             tools=tools,
         )
-    return _agent
+        return cache[session_id]
+
+    return get_or_create
+
+
+get_or_create_agent = _agent_factory()
 
 
 @app.entrypoint
 async def invoke(payload, context):
     log.info("Invoking {agent_name}...")
+    session_id = getattr(context, "session_id", "default-session")
+    agent = get_or_create_agent(session_id)
 
-    agent = get_or_create_agent()
-    result = agent(payload.get("prompt"))
-    return {{"response": str(result)}}
+    async for event in agent.stream_async(payload.get("prompt", "")):
+        if not isinstance(event, dict) or "event" not in event:
+            continue
+        yield event
 
 
 if __name__ == "__main__":
@@ -281,28 +333,24 @@ if __name__ == "__main__":
 
 
 def generate_model_load_py() -> str:
-    """Generate model/load.py for Bedrock model loading.
-
-    Uses Amazon Nova Lite by default — available without use-case form submission.
-    Anthropic Claude models require a separate access request in the Bedrock Console.
-    """
-    return '''from strands.models.bedrock import BedrockModel
+    """Generate model/load.py for Bedrock model loading."""
+    return f'''from strands.models.bedrock import BedrockModel
 
 
 def load_model() -> BedrockModel:
     """Get Bedrock model client using IAM credentials.
 
-    Default: amazon.nova-lite-v1:0 (available without access request).
-    For better quality, switch to amazon.nova-pro-v1:0 or request Claude access.
-    Note: Nova models have daily token quotas — request increase via Service Quotas
-    if you hit ThrottlingException during testing.
+    Default: Claude Sonnet (CLI 0.22.0 template default). If Anthropic model
+    access is not enabled in this account (ModelNotAccessibleException),
+    switch to "{FALLBACK_MODEL_ID}" — available immediately but with low
+    daily token quotas (request increase via Service Quotas on ThrottlingException).
     """
-    return BedrockModel(model_id="amazon.nova-lite-v1:0")
+    return BedrockModel(model_id="{RUNTIME_MODEL_ID}")
 '''
 
 
 def generate_pyproject_toml(agent_name: str) -> str:
-    """Generate pyproject.toml with AgentCore dependencies."""
+    """Generate pyproject.toml with AgentCore dependencies (CLI 0.22.0 versions)."""
     return f'''[build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -310,13 +358,13 @@ build-backend = "hatchling.build"
 [project]
 name = "{agent_name}"
 version = "0.1.0"
-description = "AgentCore Runtime Application — migrated from agentic-core"
+description = "AgentCore Runtime Application — migrated"
 requires-python = ">=3.10"
 dependencies = [
     "aws-opentelemetry-distro",
-    "bedrock-agentcore >= 1.0.3",
+    "bedrock-agentcore >= 1.9.1",
     "botocore[crt] >= 1.35.0",
-    "strands-agents >= 1.13.0",
+    "strands-agents >= 1.15.0",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -357,65 +405,62 @@ def generate_dockerfile(has_scripts: bool, has_skills: bool) -> str:
     return "\n".join(lines)
 
 
-def generate_agentcore_json(inventory: dict, region: str) -> dict[str, Any]:
-    """Generate the current flat AgentCore project config shape.
+# ---------------------------------------------------------------------------
+# Project config generators
+# ---------------------------------------------------------------------------
 
-    Schema validated against: https://schema.agentcore.aws.dev/v1/agentcore.json
-    - name: alphanumeric only, start with letter, max 23 chars
-    - runtime names: alphanumeric + underscores, start with letter, max 48 chars
-    - envVars: array of {name, value} objects
-    - No unknown root keys (description, defaultTarget, region are invalid)
+def generate_agentcore_json(inventory: dict, repo_root: Path) -> dict[str, Any]:
+    """Generate agentcore.json (CLI 0.22.0 flat resource arrays).
+
+    Harness agents → harnesses[]; code agents → runtimes[]. Credentials and
+    gateways are NOT pre-populated — the commands script adds them via the CLI
+    (they need secret values / live endpoints, and pre-populating them would
+    make the `add` commands fail with "already exists").
     """
     agents = inventory.get("agents", [])
-    secret_names = collect_secret_names(inventory.get("mcp_servers", []))
+    env_array = env_vars_to_array(collect_runtime_env(inventory.get("mcp_servers", [])))
 
-    runtimes = [
-        {
-            "name": slugify(agent.get("name", f"agent_{i}")),
-            "build": "CodeZip",
-            "codeLocation": f"app/{slugify(agent.get('name', f'agent_{i}'))}/",
-            "entrypoint": "main.py",
-            "runtimeVersion": "PYTHON_3_14",
-            "networkMode": "PUBLIC",
-            "protocol": "HTTP",
-        }
-        for i, agent in enumerate(agents)
-    ]
+    runtimes = []
+    harnesses = []
+    for i, agent in enumerate(agents):
+        name = slugify(agent.get("name", f"agent_{i}"))
+        if is_code_agent(agent, repo_root):
+            runtime: dict[str, Any] = {
+                "name": name,
+                "build": "CodeZip",
+                "codeLocation": f"app/{name}/",
+                "entrypoint": "main.py",
+                "runtimeVersion": "PYTHON_3_14",
+                "networkMode": "PUBLIC",
+                "protocol": "HTTP",
+            }
+            if env_array:
+                runtime["envVars"] = env_array
+            runtimes.append(runtime)
+        else:
+            harnesses.append({"name": name, "path": f"app/{name}"})
+
     return {
         "$schema": "https://schema.agentcore.aws.dev/v1/agentcore.json",
-        "version": 1,
         "name": project_slugify("migratedagents"),
+        "version": 1,
         "managedBy": "CDK",
         "tags": {
             "agentcore:created-by": "agentcore-migration-skill",
         },
         "runtimes": runtimes,
+        "harnesses": harnesses,
         "memories": [],
-        "credentials": [
-            {"name": slugify(name), "type": "api-key", "sourceEnvVar": name}
-            for name in secret_names
-        ],
+        "knowledgeBases": [],
+        "credentials": [],
         "evaluators": [],
         "onlineEvalConfigs": [],
-        "agentCoreGateways": [
-            {
-                "name": f"{gateway_slugify(mcp.get('name', 'mcp'))}-gateway",
-                "targets": [
-                    {
-                        "name": slugify(mcp.get("name", "mcp")),
-                        "type": "mcp-server",
-                        "endpoint": mcp.get("url") or "<REMOTE_MCP_URL>",
-                        "migrationStatus": "MANUAL" if mcp.get("transport") == "stdio" else "AUTO",
-                    }
-                ],
-            }
-            for mcp in inventory.get("mcp_servers", [])
-            if not mcp.get("disabled")
-        ],
+        "agentCoreGateways": [],
         "policyEngines": [],
         "configBundles": [],
         "abTests": [],
-        "httpGateways": [],
+        "datasets": [],
+        "payments": [],
     }
 
 
@@ -436,10 +481,7 @@ def detect_aws_account_id() -> str:
 
 
 def generate_aws_targets(region: str, account_id: str = "") -> list[dict[str, str]]:
-    """Generate aws-targets.json in the current target-list style.
-
-    Auto-detects AWS account ID from configured credentials if not provided.
-    """
+    """Generate aws-targets.json — array of {name, account, region}."""
     if not account_id:
         account_id = detect_aws_account_id()
     if not account_id:
@@ -499,12 +541,16 @@ def generate_exec_scripts(hooks: list[dict]) -> dict[str, str]:
     return scripts
 
 
-def build_mappings(inventory: dict) -> list[dict[str, str]]:
+def build_mappings(inventory: dict, repo_root: Path) -> list[dict[str, str]]:
     """Build migration status records for the report."""
     mappings: list[dict[str, str]] = []
     for agent in inventory.get("agents", []):
-        name = agent.get("name", "unnamed")
-        mappings.append({"type": "agent", "name": name, "status": "AUTO", "target": f"app/{name}/main.py"})
+        name = slugify(agent.get("name", "unnamed"))
+        if is_code_agent(agent, repo_root):
+            target = f"runtime — app/{name}/main.py"
+        else:
+            target = f"harness — app/{name}/harness.json"
+        mappings.append({"type": "agent", "name": name, "status": "AUTO", "target": target})
     for skill in inventory.get("skills", []):
         mappings.append({
             "type": "skill",
@@ -514,7 +560,10 @@ def build_mappings(inventory: dict) -> list[dict[str, str]]:
         })
     for mcp in inventory.get("mcp_servers", []):
         status = "MANUAL" if mcp.get("transport") == "stdio" else "AUTO"
-        reason = "stdio transport must be published as remote MCP or Gateway target" if status == "MANUAL" else "remote MCP URL can become a Gateway target"
+        reason = (
+            "stdio transport must be published as a remote MCP endpoint or gateway target"
+            if status == "MANUAL" else "remote MCP URL attached as harness remote_mcp tool / gateway target"
+        )
         mappings.append({"type": "mcp_server", "name": mcp.get("name", "unknown"), "status": status, "reason": reason})
         for var_name, var_info in mcp.get("env_vars", {}).items():
             if var_info.get("is_secret"):
@@ -527,59 +576,86 @@ def build_mappings(inventory: dict) -> list[dict[str, str]]:
     return mappings
 
 
-def generate_agentcore_commands(inventory: dict) -> str:
-    """Generate a reviewed command script using current AgentCore CLI verbs.
+def generate_agentcore_commands(inventory: dict, repo_root: Path) -> str:
+    """Generate the post-generation command script (verified CLI 0.22.0 verbs).
 
-    Generates create-project + credential + gateway + deploy commands.
-    Agents are declared in agentcore.json — no add-agent commands needed.
+    Harnesses and runtimes are pre-populated in agentcore.json — this script
+    only initializes the project scaffold, attaches skills, and adds
+    credentials/gateways (resources that need secret values or live endpoints).
     """
     project_name = project_slugify("migratedagents")
+    agents = inventory.get("agents", [])
+    skills = inventory.get("skills", [])
 
     lines = [
         "#!/bin/bash",
         "set -euo pipefail",
         "",
-        "# Review placeholders before running. Commands are generated from migration-inventory.json.",
+        "# Review placeholders before running. Generated from migration-inventory.json.",
+        "# Run from the generated project directory.",
         "",
-        "# Agents are already defined in agentcore/agentcore.json — no add-agent commands needed.",
+        "# ──── Initialize project scaffold (CDK) ────",
+        "# `agentcore create` overwrites agentcore.json — back up and restore.",
+        "cp agentcore/agentcore.json agentcore/agentcore.json.bak",
+        f"agentcore create --project-name {project_name} --no-agent --skip-git",
+        "cp agentcore/agentcore.json.bak agentcore/agentcore.json",
         "",
-        "# ──── Initialize project ────",
-        f"agentcore create --name {project_name} --no-agent",
+        "# ──── CDK dependencies (required before first deploy) ────",
+        "(cd agentcore/cdk && npm install)",
     ]
 
-    # Credentials — both modes need these
+    # Skills → harness mounts
+    skill_lines: list[str] = []
+    for agent in agents:
+        if is_code_agent(agent, repo_root):
+            continue  # code agents get skills baked into their package
+        name = slugify(agent.get("name", "unnamed"))
+        for skill in declared_skills(agent, skills):
+            skill_name = skill.get("name", "skill")
+            skill_lines.append(
+                f"agentcore add skill --harness {name} --path app/{name}/skills/{skill_name}"
+            )
+    if skill_lines:
+        lines.extend(["", "# ──── Skills → harness mounts ────", *skill_lines])
+
+    # Credentials
     secret_names = collect_secret_names(inventory.get("mcp_servers", []))
     if secret_names:
-        lines.extend(["", "# ──── Credentials ────"])
+        lines.extend(["", "# ──── Credentials (secrets → Identity) ────"])
         for secret_name in secret_names:
             lines.append(
                 f"agentcore add credential --type api-key --name {slugify(secret_name)} --api-key \"${secret_name}\""
             )
 
-    # Gateways — both modes need these
-    mcp_gateways = [mcp for mcp in inventory.get("mcp_servers", []) if not mcp.get("disabled")]
-    if mcp_gateways:
-        lines.extend(["", "# ──── Gateways ────"])
-        for mcp in mcp_gateways:
+    # Gateways for MCP servers shared across agents (harness remote_mcp tools
+    # are already in harness.json; gateways add auth/policy/observability)
+    stdio_mcps = [
+        mcp for mcp in inventory.get("mcp_servers", [])
+        if not mcp.get("disabled") and mcp.get("transport") == "stdio"
+    ]
+    if stdio_mcps:
+        lines.extend(["", "# ──── MANUAL: stdio MCP servers need a remote endpoint first ────"])
+        for mcp in stdio_mcps:
             gateway_name = f"{gateway_slugify(mcp.get('name', 'mcp'))}-gateway"
             target_name = slugify(mcp.get("name", "mcp"))
-            endpoint = mcp.get("url") or "<REMOTE_MCP_URL>"
             lines.extend([
-                "",
-                f"agentcore add gateway --name {gateway_name}",
-                f"agentcore add gateway-target --name {target_name} --type mcp-server --endpoint {endpoint} --gateway {gateway_name}",
+                f"# {mcp.get('name', 'mcp')}: publish the stdio server as a remote MCP endpoint, then:",
+                f"# agentcore add gateway --name {gateway_name}",
+                f"# agentcore add gateway-target --name {target_name} --type mcp-server --endpoint <REMOTE_MCP_URL> --gateway {gateway_name}",
             ])
 
     # Deploy and invoke
-    agent_name = slugify(inventory.get("agents", [{}])[0].get("name", "agent")) if inventory.get("agents") else "<agent_name>"
     lines.extend([
         "",
         "# ──── Validate & Deploy ────",
         "agentcore validate",
-        "agentcore deploy",
-        f"agentcore invoke --runtime {agent_name} --prompt \"test\"",
-        "",
+        "agentcore deploy --yes",
     ])
+    for agent in agents[:1]:
+        name = slugify(agent.get("name", "unnamed"))
+        flag = "--runtime" if is_code_agent(agent, repo_root) else "--harness"
+        lines.append(f"agentcore invoke {flag} {name} \"test\"")
+    lines.append("")
     return "\n".join(lines)
 
 
@@ -614,6 +690,12 @@ def generate_migration_report(inventory: dict, mappings: list[dict]) -> str:
             f"| {counts.get('MANUAL', 0)} | {counts.get('SKIP', 0)} |"
         )
 
+    agent_targets = [m for m in mappings if m.get("type") == "agent"]
+    if agent_targets:
+        lines.extend(["", "## Agent Targets", ""])
+        for m in agent_targets:
+            lines.append(f"- **{m['name']}** → {m.get('target', '')}")
+
     lines.extend(["", "## Manual Action Items", ""])
     manual_items = [mapping for mapping in mappings if mapping.get("status") == "MANUAL"]
     if manual_items:
@@ -626,9 +708,9 @@ def generate_migration_report(inventory: dict, mappings: list[dict]) -> str:
         "",
         "## Deployment",
         "",
-        "1. Review `agentcore/agentcore.json`, `agentcore/aws-targets.json`, and generated app files.",
+        "1. Review `agentcore/agentcore.json`, `agentcore/aws-targets.json`, harness/app files.",
         "2. Review and run `agentcore-commands.sh`, or apply the same commands manually.",
-        "3. Test locally with `agentcore dev` before cloud deployment when Docker/runtime dependencies are present.",
+        "3. Test locally with `agentcore dev` (code agents) before cloud deployment.",
         "",
         "```bash",
         "cd agentcore-project",
@@ -666,7 +748,7 @@ def main() -> None:
     agentcore_dir = out_dir / "agentcore"
     agentcore_dir.mkdir(parents=True, exist_ok=True)
     (agentcore_dir / "agentcore.json").write_text(
-        json.dumps(generate_agentcore_json(inventory, args.region), indent=2)
+        json.dumps(generate_agentcore_json(inventory, repo_root), indent=2)
     )
     (agentcore_dir / "aws-targets.json").write_text(
         json.dumps(generate_aws_targets(args.region), indent=2)
@@ -677,45 +759,44 @@ def main() -> None:
     for agent in inventory.get("agents", []):
         agent_name = slugify(agent.get("name", "unnamed"))
         agent_dir = out_dir / "app" / agent_name
-        scripts_dir = agent_dir / "scripts"
-        skills_dir = agent_dir / "skills"
-        model_dir = agent_dir / "model"
         agent_dir.mkdir(parents=True, exist_ok=True)
 
-        script_refs = find_agent_script_refs(agent, repo_root)
-        if script_refs:
+        matching_skills = declared_skills(agent, skills)
+
+        if is_code_agent(agent, repo_root):
+            # ── Code runtime ──
+            script_refs = find_agent_script_refs(agent, repo_root)
+            scripts_dir = agent_dir / "scripts"
             scripts_dir.mkdir(exist_ok=True)
             for script in script_refs:
                 shutil.copy2(script, scripts_dir / script.name)
 
-        # Only copy skills the agent explicitly declares in frontmatter
-        agent_skills = agent.get("frontmatter", {}).get("skills", [])
-        if agent_skills:
-            matching_skills = [s for s in skills if s.get("name") in agent_skills]
+            copied_skills = copy_skill_dirs(matching_skills, agent_dir / "skills")
+
+            (agent_dir / "main.py").write_text(generate_main_py(agent))
+            (agent_dir / "pyproject.toml").write_text(generate_pyproject_toml(agent_name))
+
+            model_dir = agent_dir / "model"
+            model_dir.mkdir(exist_ok=True)
+            (model_dir / "__init__.py").write_text("")
+            (model_dir / "load.py").write_text(generate_model_load_py())
+
+            (agent_dir / "runtime-metadata.json").write_text(
+                json.dumps(generate_runtime_metadata(agent, mcp_servers), indent=2)
+            )
+            (agent_dir / "Dockerfile").write_text(
+                generate_dockerfile(has_scripts=bool(script_refs), has_skills=bool(copied_skills))
+            )
         else:
-            matching_skills = []  # No skills declared → copy none; note in report
-        if matching_skills:
-            skills_dir.mkdir(exist_ok=True)
-            for skill in matching_skills:
-                source_file = Path(skill.get("source_file", ""))
-                skill_source_dir = source_file.parent if source_file.is_file() else None
-                if skill_source_dir and skill_source_dir.is_dir():
-                    copy_tree(skill_source_dir, skills_dir / skill.get("name", skill_source_dir.name))
-
-        (agent_dir / "main.py").write_text(generate_main_py(agent))
-        (agent_dir / "pyproject.toml").write_text(generate_pyproject_toml(agent_name))
-
-        # Generate model/ module for Bedrock model loading
-        model_dir.mkdir(exist_ok=True)
-        (model_dir / "__init__.py").write_text("")
-        (model_dir / "load.py").write_text(generate_model_load_py())
-
-        (agent_dir / "runtime-metadata.json").write_text(
-            json.dumps(generate_runtime_metadata(agent, mcp_servers), indent=2)
-        )
-        (agent_dir / "Dockerfile").write_text(
-            generate_dockerfile(has_scripts=bool(script_refs), has_skills=bool(matching_skills))
-        )
+            # ── Harness ──
+            (agent_dir / "harness.json").write_text(
+                json.dumps(generate_harness_json(agent, mcp_servers), indent=2)
+            )
+            (agent_dir / "system-prompt.md").write_text(
+                flatten_persona_to_prompt(agent) or "You are a helpful assistant"
+            )
+            # Copy declared skills next to the harness; agentcore-commands.sh mounts them
+            copy_skill_dirs(matching_skills, agent_dir / "skills")
 
         registry_dir = out_dir / "registry"
         registry_dir.mkdir(exist_ok=True)
@@ -733,17 +814,19 @@ def main() -> None:
             path.chmod(0o755)
 
     command_script = out_dir / "agentcore-commands.sh"
-    command_script.write_text(generate_agentcore_commands(inventory))
+    command_script.write_text(generate_agentcore_commands(inventory, repo_root))
     command_script.chmod(0o755)
 
-    mappings = build_mappings(inventory)
+    mappings = build_mappings(inventory, repo_root)
     (out_dir / "migration-report.md").write_text(generate_migration_report(inventory, mappings))
 
     auto = sum(1 for mapping in mappings if mapping["status"] == "AUTO")
     manual = sum(1 for mapping in mappings if mapping["status"] == "MANUAL")
     skip = sum(1 for mapping in mappings if mapping["status"] == "SKIP")
+    n_harness = sum(1 for m in mappings if m["type"] == "agent" and m["target"].startswith("harness"))
+    n_runtime = sum(1 for m in mappings if m["type"] == "agent" and m["target"].startswith("runtime"))
     print(f"\n✅ AgentCore project generated at: {out_dir}")
-    print(f"   Agents: {len(inventory.get('agents', []))}")
+    print(f"   Agents: {n_harness} harness, {n_runtime} code runtime")
     print(f"   Mappings: {auto} auto, {manual} manual, {skip} skipped")
     print(f"   Commands: {command_script}")
     print(f"   Report: {out_dir / 'migration-report.md'}")

@@ -78,16 +78,31 @@ def main() -> None:
         "Configure credentials: aws configure  OR  export AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY",
     ))
 
-    # 5. AgentCore CLI
-    ac_path = shutil.which("agentcore")
-    ac_ver = get_version(["agentcore", "--version"]) if ac_path else ""
+    # 5. uv (required by the AgentCore CLI for Python agents)
+    uv_path = shutil.which("uv")
     results.append(check(
-        f"AgentCore CLI {ac_ver or 'not found'}",
-        bool(ac_path),
-        "Install AgentCore CLI: npm install -g @aws/agentcore",
+        f"uv {'installed' if uv_path else 'not found'}",
+        bool(uv_path),
+        "Install uv: brew install uv  OR  curl -LsSf https://astral.sh/uv/install.sh | sh",
     ))
 
-    # 6. AWS bedrock-agentcore-control namespace
+    # 6. AgentCore CLI ≥ 0.22 (harness support: add harness/skill/tool, export harness)
+    ac_path = shutil.which("agentcore")
+    ac_ver = get_version(["agentcore", "--version"]) if ac_path else ""
+    ac_ok = False
+    if ac_ver:
+        try:
+            major, minor = (int(x) for x in ac_ver.split(".")[:2])
+            ac_ok = (major, minor) >= (0, 22)
+        except ValueError:
+            pass
+    results.append(check(
+        f"AgentCore CLI {ac_ver or 'not found'} (need ≥ 0.22)",
+        ac_ok,
+        "Install/upgrade: npm install -g @aws/agentcore@latest  (or: agentcore update)",
+    ))
+
+    # 7. AWS bedrock-agentcore-control namespace
     ac_ns = get_version(["aws", "bedrock-agentcore-control", "help"])
     # help command returns content on success
     results.append(check(

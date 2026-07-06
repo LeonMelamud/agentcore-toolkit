@@ -44,7 +44,7 @@ agentcore create --defaults        # New project with a default harness (interac
 agentcore dev                      # Local dev server + browser-based agent inspector
 agentcore validate                 # Validate agentcore/ config files
 agentcore deploy                   # Deploy via CDK → CloudFormation stack AgentCore-<project>-default
-agentcore invoke --agent <name> "test prompt"
+agentcore invoke --harness <name> "test"    # or --runtime <name> for code agents
 agentcore logs / traces / status   # Observability
 agentcore exec -- <cmd>            # Shell into a deployed agent container
 ```

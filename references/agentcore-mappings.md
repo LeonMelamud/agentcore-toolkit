@@ -67,7 +67,7 @@ Model default: `global.anthropic.claude-sonnet-4-5-20250929-v1:0` (code agents) 
 | Add Gateway | `agentcore add gateway --name <gateway>` |
 | Add MCP Gateway target | `agentcore add gateway-target --name <target> --type mcp-server --endpoint <mcp-url> --gateway <gateway>` |
 | Export harness to code | `agentcore export harness --name <n> \| --arn <arn>` |
-| Validate / deploy / invoke | `agentcore validate` / `agentcore deploy` / `agentcore invoke --agent <n> "test"` |
+| Validate / deploy / invoke | `agentcore validate` / `agentcore deploy` / `agentcore invoke --harness <n> "test"` (code agents: `--runtime <n>`) |
 
 **Important:** resources pre-populated in `agentcore.json` must not also be `add`-ed — "already exists". Edit the JSON (schema authority: `agentcore/.llm-context/` types) or use `add` for new resources only.
 
