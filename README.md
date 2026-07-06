@@ -60,11 +60,11 @@ This repo is a Claude Code **plugin** that bundles the `agentcore` skill plus a 
 **As a plugin (Claude Code marketplace):**
 
 ```
-/plugin marketplace add leonmelamud/agentcore-toolkit
+/plugin marketplace add LeonMelamud/agentcore-toolkit
 /plugin install agentcore@agentcore-skills
 ```
 
-Hosted at `github.com/leonmelamud/agentcore-toolkit`. While the repository is private, installers (`/plugin marketplace add` and `npx skills add leonmelamud/agentcore-toolkit`) resolve only for accounts with repo access; make it public to distribute openly.
+Hosted at `github.com/LeonMelamud/agentcore-toolkit`. While the repository is private, installers (`/plugin marketplace add` and `npx skills add LeonMelamud/agentcore-toolkit`) resolve only for accounts with repo access; make it public to distribute openly.
 
 **As a personal or project skill (copy the bundle):**
 
