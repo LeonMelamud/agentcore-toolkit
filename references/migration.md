@@ -118,7 +118,7 @@ Generate `migration-report.md`: summary table (counts by artifact type and statu
 
 ## Step 6 — Deploy
 
-Follow `migration-modes.md`. Short form (or just run `agentcore-commands.sh`, which contains exactly this):
+**Run `deployment-checklist.md` first** — the `[BLOCKER]` items (model access + form propagation, daily token quota, IAM confused-deputy, nested `create` scaffold) catch the failures that otherwise surface only after deploy. Then follow `migration-modes.md`. Short form (or just run `agentcore-commands.sh`, which contains exactly this):
 
 ```bash
 cd <output-dir>

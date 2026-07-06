@@ -147,7 +147,13 @@ Limitations documented by earlier migrations that AWS has since fixed — do not
 - `references/source-formats.md` — per-tool parsing rules for 15 assistant formats
 - `references/agentcore-mappings.md` — mapping rules: source artifacts → AgentCore equivalents
 - `references/migration-modes.md` — deploy workflow, validation, teardown, error table
+- `references/security-iam.md` — least-privilege execution role, confused-deputy protection, model-ARN scoping
+- `references/deployment-checklist.md` — `[BLOCKER]`-gated checklist to run before `agentcore deploy`
 - `references/templates/` — templates for `agentcore.json`, `harness.json`, `runtime-metadata.json`, `Dockerfile`, registry records
 
 ### Assets
-- `assets/poc-cve-verify/` — complete worked migration of `cve-verify.agent.md`
+- `assets/poc-cve-verify/` — complete worked migration (harness + code runtime), with `VERIFIED.md` (live AWS run evidence)
+- `assets/iam-policies/` — appliable least-privilege trust + permissions policy templates
+
+### Evals
+- `evals/evals.json` — regression scenarios (harness/code classification, stdio MCP, export-harness, quota, secrets) for self-testing the skill
