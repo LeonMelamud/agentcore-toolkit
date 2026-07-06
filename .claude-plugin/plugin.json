@@ -1,0 +1,20 @@
+{
+  "name": "agentcore",
+  "displayName": "AgentCore",
+  "version": "1.0.0",
+  "description": "Deploy, operate, and migrate AI agents on Amazon Bedrock AgentCore. Harness-first migration from 15 coding assistants (Claude Code, Copilot, Cursor, ...) to managed harnesses + Strands runtimes. Every command verified against the AgentCore CLI 0.22.0; includes a harness-first generator, IAM least-privilege templates, a pre-deploy checklist, and a boto3 invoke fallback.",
+  "author": {
+    "name": "ThetaRay"
+  },
+  "license": "Internal use only",
+  "keywords": [
+    "amazon-bedrock",
+    "bedrock-agentcore",
+    "agentcore",
+    "harness",
+    "strands-agents",
+    "migration",
+    "ai-agents",
+    "skill"
+  ]
+}

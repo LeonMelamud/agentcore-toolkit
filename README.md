@@ -33,30 +33,40 @@ cd agentcore-project
 
 ## Structure
 
+This repo is a Claude Code **plugin** that bundles the `agentcore` skill.
+
 ```
-├── SKILL.md                     # General AgentCore skill (entry point)
-├── scripts/
-│   ├── preflight_check.py       # Verify prerequisites
-│   ├── scan_configs.py          # Scan repo for AI configs → inventory
-│   └── generate_project.py      # Inventory → AgentCore project (harness-first)
-├── references/
-│   ├── harness.md               # Harness commands, schema, skills, export-to-code
-│   ├── migration.md             # Migration workflow
-│   ├── source-formats.md        # Per-tool detection/parsing rules
-│   ├── agentcore-mappings.md    # Mapping rules
-│   ├── migration-modes.md       # Deploy workflow, errors, teardown
-│   └── templates/
-└── assets/
-    └── poc-cve-verify/          # Worked migration example
+├── .claude-plugin/
+│   ├── plugin.json              # Plugin manifest
+│   └── marketplace.json         # Marketplace manifest (installable via /plugin)
+└── skills/agentcore/            # The skill
+    ├── SKILL.md                 # Entry point
+    ├── scripts/
+    │   ├── preflight_check.py   # Verify prerequisites
+    │   ├── scan_configs.py      # Scan repo for AI configs → inventory
+    │   ├── generate_project.py  # Inventory → AgentCore project (harness-first)
+    │   └── invoke_harness.py    # boto3 invoke fallback
+    ├── references/              # harness.md, migration.md, security-iam.md, deployment-checklist.md, ...
+    ├── evals/evals.json         # Regression scenarios (self-test)
+    └── assets/
+        ├── poc-cve-verify/      # Worked migration example (+ VERIFIED.md)
+        └── iam-policies/        # Least-privilege trust + permissions templates
 ```
 
-## Installing as a Skill
+## Installing
+
+**As a plugin (Claude Code marketplace):**
+
+```
+/plugin marketplace add <owner>/agentcore-migration
+/plugin install agentcore@thetaray-agent-skills
+```
+
+**As a personal or project skill (copy the bundle):**
 
 ```bash
-# Claude Code (project-level)
-cp -r <this-repo> .claude/skills/agentcore/
-# or GitHub Copilot
-cp -r <this-repo> .github/skills/agentcore/
+cp -r skills/agentcore ~/.claude/skills/agentcore        # personal
+cp -r skills/agentcore .claude/skills/agentcore          # project (or .github/skills/ for Copilot)
 ```
 
 ## License
