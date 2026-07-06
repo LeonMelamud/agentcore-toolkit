@@ -8,7 +8,6 @@
   "plugins": [
     {
       "name": "agentcore",
-      "version": "1.0.0",
       "source": "./",
       "author": { "name": "Leon Melamud" },
       "description": "Harness-first migration and lifecycle skill for Amazon Bedrock AgentCore — migrate coding-assistant agents/skills/MCP to managed harnesses + Strands runtimes, verified against CLI 0.22.0. Bundles companion AWS skills (CloudFormation, serverless, solution-architect, expert).",

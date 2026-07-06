@@ -65,8 +65,10 @@ Apply the rules in `agentcore-mappings.md`. First decision per agent — harness
 |---|---|
 | Persona/instructions + declared skills + builtin tools (read/search/execute/browser) | **Harness** |
 | Remote MCP dependencies | **Harness** (`remote_mcp` tool or gateway) |
-| Bundled scripts the agent must execute, lifecycle hooks, custom tool code | **Code runtime** |
+| Agent body references an existing bundled script (`.github/scripts/*.{sh,py}`) | **Code runtime** (the implemented classifier keys on this signal) |
 | Handoffs to other agents | Each target is its own harness/runtime; note the relationship in the report |
+
+> The automated classifier only routes to a code runtime on the bundled-script signal. Lifecycle hooks and custom tool code are manual-review considerations — noted for the human, not auto-detected.
 
 Then map each artifact:
 

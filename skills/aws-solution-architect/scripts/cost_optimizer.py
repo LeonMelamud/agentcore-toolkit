@@ -344,3 +344,25 @@ class CostOptimizer:
                 ]
             }
         ]
+
+
+def main():
+    import argparse
+    import json
+
+    parser = argparse.ArgumentParser(
+        description="Analyze AWS resources and recommend cost optimizations."
+    )
+    parser.add_argument('--resources', required=True, help='Path to resource inventory JSON file')
+    parser.add_argument('--monthly-spend', type=float, required=True, help='Current monthly AWS spend in USD')
+    args = parser.parse_args()
+
+    with open(args.resources) as f:
+        resources = json.load(f)
+
+    optimizer = CostOptimizer(resources, args.monthly_spend)
+    print(json.dumps(optimizer.analyze_and_optimize(), indent=2))
+
+
+if __name__ == '__main__':
+    main()

@@ -9,7 +9,7 @@ A **harness** is a fully managed, declaratively configured agent (see `harness.m
 | Source artifact | AgentCore target | Location |
 |---|---|---|
 | `.agent.md` (persona + body), simple | Harness | `agentcore.json → harnesses[]` + `app/<name>/harness.json` + `system-prompt.md` |
-| `.agent.md` with scripts/hooks/custom tools | Runtime agent | `agentcore.json → runtimes[]` + `app/<name>/main.py` |
+| `.agent.md` whose body references an existing bundled script (`.github/scripts/*.{sh,py}`) | Runtime agent | `agentcore.json → runtimes[]` + `app/<name>/main.py` |
 | Skill (SKILL.md dir) | Harness `skills[]` (path/s3/git) or code agent `skills/` dir | `harness.json → skills[]` |
 | MCP server config | Harness `remote_mcp` tool, or Gateway target | `harness.json → tools[]` / `agentCoreGateways[]` |
 | Secret env vars | Identity credential (or Secrets Manager ARN reference) | `credentials[]` |
@@ -159,6 +159,8 @@ agentcore add credential --type api-key --name <credential-name> --api-key "$SEC
 
 If the secret already lives in AWS Secrets Manager, reference its ARN in the credential provider instead of copying the value. Non-secret env vars → runtime `envVars` / harness `--env`.
 
+Automatic secret-vs-config routing applies only to MCP-server `env` blocks (that is what the scan inventories); agent-level env is not auto-inventoried and must be routed manually.
+
 ## Hook mapping
 
 | Source hook | AgentCore equivalent | Implementation |
@@ -195,7 +197,7 @@ Standalone memory resource: `agentcore add memory --name <n> --strategies ... --
       "build": "CodeZip",
       "codeLocation": "app/cve_verify/",
       "entrypoint": "main.py",
-      "runtimeVersion": "PYTHON_3_14",
+      "runtimeVersion": "PYTHON_3_12",
       "networkMode": "PUBLIC",
       "protocol": "HTTP",
       "envVars": [ { "name": "NEXUS_IQ_URL", "value": "https://iq.example.com" } ]

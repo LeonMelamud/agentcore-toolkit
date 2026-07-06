@@ -238,6 +238,9 @@ def generate_runtime_metadata(agent: dict[str, Any], mcp_servers: list[dict]) ->
                 "name": mcp.get("name", "unnamed"),
                 "transport": mcp.get("transport", "unknown"),
                 "url": mcp.get("url", ""),
+                # Preserve stdio command/args for review (remote MCP leaves these empty).
+                "command": mcp.get("command", ""),
+                "args": mcp.get("args", []),
                 "migrationStatus": "MANUAL" if mcp.get("transport") == "stdio" else "AUTO",
                 "note": "stdio MCP must be exposed as a remote MCP endpoint or gateway target"
                 if mcp.get("transport") == "stdio" else "remote endpoint can become a Gateway target",
@@ -436,7 +439,7 @@ def generate_agentcore_json(inventory: dict, repo_root: Path) -> dict[str, Any]:
                 "build": "CodeZip",
                 "codeLocation": f"app/{name}/",
                 "entrypoint": "main.py",
-                "runtimeVersion": "PYTHON_3_14",
+                "runtimeVersion": "PYTHON_3_12",
                 "networkMode": "PUBLIC",
                 "protocol": "HTTP",
             }

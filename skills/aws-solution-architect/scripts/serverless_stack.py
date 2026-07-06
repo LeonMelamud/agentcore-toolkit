@@ -110,7 +110,7 @@ Resources:
     Properties:
       FunctionName: !Sub '${{Environment}}-{self.app_name}-api'
       Handler: index.handler
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       CodeUri: ./src
       MemorySize: 512
       Timeout: 10
@@ -293,7 +293,7 @@ export class {self.app_name.replace('-', '').title()}Stack extends cdk.Stack {{
     // Lambda Function
     const apiFunction = new lambda.Function(this, '{self.app_name}ApiFunction', {{
       functionName: `${{cdk.Stack.of(this).stackName}}-api`,
-      runtime: lambda.Runtime.NODEJS_18_X,
+      runtime: lambda.Runtime.NODEJS_22_X,
       handler: 'index.handler',
       code: lambda.Code.fromAsset('./src'),
       memorySize: 512,
@@ -551,7 +551,7 @@ resource "aws_lambda_function" "api" {{
   function_name = "${{var.environment}}-${{var.app_name}}-api"
   role          = aws_iam_role.lambda.arn
   handler       = "index.handler"
-  runtime       = "nodejs18.x"
+  runtime       = "nodejs22.x"
   memory_size   = 512
   timeout       = 10
 
@@ -661,3 +661,21 @@ output "table_name" {{
 }}
 """
         return terraform
+
+
+def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Generate a serverless CloudFormation template for an app."
+    )
+    parser.add_argument('--app-name', required=True, help='Application name')
+    parser.add_argument('--region', default='us-east-1', help='AWS region')
+    args = parser.parse_args()
+
+    generator = ServerlessStackGenerator(args.app_name, {'region': args.region})
+    print(generator.generate_cloudformation_template())
+
+
+if __name__ == '__main__':
+    main()

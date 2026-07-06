@@ -1,0 +1,21 @@
+agentcore-migration
+Copyright (c) 2026 Leon Melamud
+
+This repository is distributed under the MIT License (see LICENSE), with the
+exception of the third-party companion skills noted below, which are
+distributed under the Apache License, Version 2.0 (see LICENSE-APACHE).
+
+Third-party Apache-2.0 components
+---------------------------------
+
+skills/aws-expert/
+    Copyright (c) PCL Team
+    Licensed under the Apache License, Version 2.0.
+
+skills/aws-serverless/
+    From the vibeship-spawner-skills project.
+    Licensed under the Apache License, Version 2.0.
+
+The files under these directories are provided under Apache-2.0
+(see LICENSE-APACHE). All other files in this repository are provided
+under the MIT License (see LICENSE).

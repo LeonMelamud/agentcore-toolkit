@@ -1,6 +1,6 @@
 ---
 name: aws-cloudformation
-description: Author, validate, and troubleshoot AWS CloudFormation templates. Covers template authoring with secure defaults, pre-deployment validation (cfn-lint, cfn-guard, change sets), and root-cause diagnosis of failed stacks using CloudFormation events and CloudTrail correlation.
+description: "Use when authoring, validating, or debugging standalone AWS CloudFormation templates (YAML/JSON) — writing or editing resources with secure defaults, running cfn-lint / cfn-guard / change-set validation before deploy, or diagnosing a failed or rolled-back stack via CloudFormation events and CloudTrail. Triggers: 'write a CloudFormation template', 'validate my template', 'cfn-lint', 'cfn-guard', 'change set', 'CREATE_FAILED', 'ROLLBACK_COMPLETE', 'stack stuck in UPDATE_ROLLBACK_FAILED'. For SAM/serverless-specific templates use aws-serverless; for end-to-end architecture design that emits IaC use aws-solution-architect."
 version: 1
 metadata:
   service: [cloudformation, cloudtrail, iam]
@@ -37,7 +37,7 @@ Run three validation layers in order — each catches different classes of error
 2. **Security and compliance** — [check-cloudformation-template-compliance SOP](references/check-cloudformation-template-compliance.script.md) (cfn-guard)
 3. **Pre-deployment** — [cloudformation-pre-deploy-validation SOP](references/cloudformation-pre-deploy-validation.script.md) (change set + `describe-events` API)
 
-**Critical:** Pre-deployment validation errors are retrieved via `aws cloudformation describe-events --change-set-id <arn> --region <region>`. Do NOT use `describe-stack-events` — that API does not return validation errors. Note: `describe-events` is a newer API — if the command is not recognized, upgrade the AWS CLI to the latest version.
+**Critical:** Pre-deployment validation errors are retrieved via `aws cloudformation describe-events --change-set-name <arn> --region <region>`. Do NOT use `describe-stack-events` — that API does not return validation errors. Note: `describe-events` is a newer API — if the command is not recognized, upgrade the AWS CLI to the latest version.
 
 ### Troubleshoot a failed deployment
 

@@ -4,7 +4,7 @@ General skill for Amazon Bedrock AgentCore: deploy and operate harnesses and run
 
 **Harness-first:** agents that are persona + skills + standard tools deploy as declarative harnesses (no code). Only agents with custom logic get generated Strands code. Verified against `agentcore` CLI 0.22.0 (July 2026).
 
-The plugin also bundles companion AWS skills — `aws-cloudformation`, `aws-expert`, `aws-serverless`, `aws-skills`, `aws-solution-architect` — so a coding agent has broader AWS context when building or migrating agents.
+The plugin also bundles companion AWS skills — `aws-cloudformation`, `aws-expert`, `aws-serverless`, `aws-solution-architect` — so a coding agent has broader AWS context when building or migrating agents.
 
 ## Quick Start
 
@@ -45,7 +45,6 @@ This repo is a Claude Code **plugin** that bundles the `agentcore` skill plus a 
 │   ├── aws-cloudformation/      # CloudFormation authoring
 │   ├── aws-expert/              # General AWS guidance
 │   ├── aws-serverless/          # Serverless (Lambda/API GW) patterns
-│   ├── aws-skills/              # AWS skills index
 │   ├── aws-solution-architect/  # Architecture guidance
 │   └── agentcore/               # The AgentCore migration skill
 │       ├── SKILL.md             # Entry point
@@ -61,9 +60,11 @@ This repo is a Claude Code **plugin** that bundles the `agentcore` skill plus a 
 **As a plugin (Claude Code marketplace):**
 
 ```
-/plugin marketplace add <owner>/agentcore-migration
+/plugin marketplace add leonmelamud/agentcore-toolkit
 /plugin install agentcore@agentcore-skills
 ```
+
+Hosted at `github.com/leonmelamud/agentcore-toolkit`. While the repository is private, installers (`/plugin marketplace add` and `npx skills add leonmelamud/agentcore-toolkit`) resolve only for accounts with repo access; make it public to distribute openly.
 
 **As a personal or project skill (copy the bundle):**
 
@@ -74,4 +75,4 @@ cp -r skills/agentcore .claude/skills/agentcore          # project (or .github/s
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+The plugin and the `agentcore`, `aws-cloudformation`, and `aws-solution-architect` skills are MIT — see [LICENSE](LICENSE). The `aws-expert` and `aws-serverless` companion skills are third-party components licensed under Apache-2.0 — see [LICENSE-APACHE](LICENSE-APACHE) and [NOTICE](NOTICE).

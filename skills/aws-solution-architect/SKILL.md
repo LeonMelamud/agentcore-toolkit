@@ -1,6 +1,6 @@
 ---
 name: "aws-solution-architect"
-description: Design AWS architectures for startups using serverless patterns and IaC templates. Use when asked to design serverless architecture, create CloudFormation templates, optimize AWS costs, set up CI/CD pipelines, or migrate to AWS. Covers Lambda, API Gateway, DynamoDB, ECS, Aurora, and cost optimization.
+description: Use when asked to design serverless architecture, create CloudFormation templates, optimize AWS costs, set up CI/CD pipelines, or migrate to AWS. Design AWS architectures for startups using serverless patterns and IaC templates. Covers Lambda, API Gateway, DynamoDB, ECS, Aurora, and cost optimization. For editing/validating an existing raw CloudFormation stack use aws-cloudformation; for writing Lambda/event handler code use aws-serverless.
 ---
 
 # AWS Solution Architect
@@ -36,11 +36,25 @@ python scripts/architecture_designer.py --input requirements.json
 
 ```json
 {
-  "recommended_pattern": "serverless_web",
-  "service_stack": ["S3", "CloudFront", "API Gateway", "Lambda", "DynamoDB", "Cognito"],
-  "estimated_monthly_cost_usd": 35,
-  "pros": ["Low ops overhead", "Pay-per-use", "Auto-scaling"],
-  "cons": ["Cold starts", "15-min Lambda limit", "Eventual consistency"]
+  "pattern_name": "Serverless Web Application",
+  "description": "Fully serverless architecture with zero server management",
+  "use_case": "SaaS platforms, low to medium traffic websites, MVPs",
+  "services": {
+    "frontend": { "service": "S3 + CloudFront", "purpose": "Static website hosting with global CDN", "configuration": { "...": "..." } },
+    "api": { "service": "API Gateway + Lambda", "purpose": "REST API backend with auto-scaling", "configuration": { "...": "..." } },
+    "database": { "service": "DynamoDB", "purpose": "NoSQL database with pay-per-request pricing", "configuration": { "...": "..." } }
+  },
+  "estimated_cost": {
+    "monthly_usd": 35,
+    "breakdown": { "CloudFront": "10-30 USD", "Lambda": "5-20 USD", "API Gateway": "10-40 USD", "DynamoDB": "5-30 USD" }
+  },
+  "pros": ["No server management", "Auto-scaling built-in", "Pay only for what you use"],
+  "cons": ["Cold start latency (100-500ms)", "Vendor lock-in to AWS", "Debugging distributed systems complex"],
+  "scaling_characteristics": {
+    "users_supported": "1k - 100k",
+    "requests_per_second": "100 - 10,000",
+    "scaling_method": "Automatic (Lambda concurrency)"
+  }
 }
 ```
 
@@ -79,7 +93,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Handler: index.handler
-      Runtime: nodejs20.x
+      Runtime: nodejs22.x
       MemorySize: 512
       Timeout: 30
       Environment:
@@ -124,12 +138,14 @@ const vpc = new ec2.Vpc(this, 'AppVpc', { maxAzs: 2 });
 
 const cluster = new ecs.Cluster(this, 'AppCluster', { vpc });
 
-const db = new rds.ServerlessCluster(this, 'AppDb', {
+const db = new rds.DatabaseCluster(this, 'AppDb', {
   engine: rds.DatabaseClusterEngine.auroraPostgres({
-    version: rds.AuroraPostgresEngineVersion.VER_15_2,
+    version: rds.AuroraPostgresEngineVersion.VER_16_4,
   }),
   vpc,
-  scaling: { minCapacity: 0.5, maxCapacity: 4 },
+  writer: rds.ClusterInstance.serverlessV2('Writer'),
+  serverlessV2MinCapacity: 0.5,
+  serverlessV2MaxCapacity: 4,
 });
 ```
 

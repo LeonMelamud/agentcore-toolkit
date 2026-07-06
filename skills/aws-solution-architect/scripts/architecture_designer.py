@@ -806,3 +806,32 @@ class ArchitectureDesigner:
         ]
 
         return checklist
+
+
+def main():
+    import argparse
+    import json
+    import sys
+
+    parser = argparse.ArgumentParser(
+        description="Recommend an AWS architecture pattern from a requirements JSON file."
+    )
+    parser.add_argument('--input', required=True, help='Path to requirements JSON file')
+    parser.add_argument('--output', help='Optional path to write the design JSON')
+    args = parser.parse_args()
+
+    with open(args.input) as f:
+        requirements = json.load(f)
+
+    designer = ArchitectureDesigner(requirements)
+    design = designer.recommend_architecture_pattern()
+
+    output_json = json.dumps(design, indent=2)
+    print(output_json)
+    if args.output:
+        with open(args.output, 'w') as f:
+            f.write(output_json)
+
+
+if __name__ == '__main__':
+    main()

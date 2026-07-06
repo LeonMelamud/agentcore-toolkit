@@ -74,7 +74,7 @@ Resources:
   ApiFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Runtime: nodejs18.x
+      Runtime: nodejs22.x
       Handler: index.handler
       MemorySize: 512
       Timeout: 10
