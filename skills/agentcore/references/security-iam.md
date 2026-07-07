@@ -16,6 +16,7 @@ Every deployed runtime/harness assumes an execution role. Two documents:
 - **Confused-deputy conditions on every service trust policy** — `aws:SourceAccount` + `aws:SourceArn` on both `bedrock-agentcore.amazonaws.com` and (if used) `bedrock.amazonaws.com`.
 - **Prefer JWT workload identity for end-user agents** — `GetWorkloadAccessTokenForJWT` validates issuer/signature/expiry. Explicitly **Deny** `GetWorkloadAccessTokenForUserId` / `InvokeAgentRuntimeForUser` unless you truly need the unauthenticated user-id path (it accepts any opaque string).
 - **Secrets never in code or generated files** — API keys → AgentCore Identity credentials, or reference an existing Secrets Manager ARN. See `agentcore-mappings.md`.
+- **`allowedTools` is not a security boundary — `InvokeAgentRuntimeCommand` bypasses it.** The harness `allowedTools` allow-list only scopes LLM tool selection during `InvokeHarness`. `bedrock-agentcore:InvokeAgentRuntimeCommand` is a separate IAM action that executes commands (e.g. `shell`) directly, without passing through the LLM or its allow-list. To actually prevent direct command execution, **do not grant `bedrock-agentcore:InvokeAgentRuntimeCommand`** in your policies.
 - **Run IAM Access Analyzer** on the final policies before deploy.
 
 ## `iam:PassRole` gotcha

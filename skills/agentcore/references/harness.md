@@ -92,6 +92,32 @@ agentcore add tool --harness <n> --type agentcore_gateway --gateway <project-gat
 agentcore add tool --harness <n> --type inline_function --name <t> --description "<shown to model>" --input-schema @schema.json
 ```
 
+Built-in `shell` (bash) and `file_operations` (view/create/edit) are available in every session unless restricted by `allowedTools`.
+
+**Secure MCP headers** — reference a Token Vault credential provider instead of a plain secret; the `${arn:...}` resolves to the key at invoke time (better than a raw token in `--mcp-headers`):
+
+```bash
+agentcore add tool --harness <n> --type remote_mcp --name exa --url https://mcp.exa.ai/mcp \
+  --header 'x-api-key=${arn:aws:bedrock-agentcore:<region>:<acct>:token-vault/default/apikeycredentialprovider/<key>}'
+```
+
+**Gateway OAuth** — `--outbound-auth oauth` maps to `config.agentCoreGateway.outboundAuth.oauth` in `harness.json`, which needs `credentialProviderName` + `scopes`.
+
+### allowedTools patterns
+
+`allowedTools` scopes which tools the LLM may select during `InvokeHarness` (omit = all allowed). Patterns:
+
+| Pattern | Matches |
+|---|---|
+| `*` | all tools |
+| `shell` | builtin by name |
+| `file_*` | builtin glob (`file_operations`, `file_read`) |
+| `@builtin` / `@builtin/<name>` | all / one builtin |
+| `@server` / `@server/tool` | all / one tool from an MCP server |
+| `@server/glob` / `@*/tool` | glob within / across servers |
+
+**Does not restrict `InvokeAgentRuntimeCommand`** — see `security-iam.md`.
+
 ## Export to code
 
 When the config ceases to be enough (custom tool logic, middleware, custom loop):
@@ -110,6 +136,7 @@ This is the supported path for Console-created harnesses — the pre-GA "harness
 
 Human-in-the-loop no longer requires custom infrastructure:
 
+- **Inline functions** (`inline_function` tool) — the primary HITL pattern. The tool schema executes client-side, not on the harness VM: when the agent calls it, the invocation pauses and returns the call to your code. In CLI mode the stream ends with `stopReason: "tool_use"`; you compute the result and resume with a follow-up invoke that sends **both** the assistant `toolUse` message and your `toolResult` (the harness does not persist a partial turn). Use for approvals or calling internal APIs.
 - **Gateway elicitation pass-through** — an MCP tool behind a gateway can request user input mid-execution (form mode: structured confirm; URL mode: e.g. OAuth consent). Requires gateway MCP sessions.
 - **Step Functions integration** — wrap `InvokeHarness` in a workflow with human-approval, error-handling, or conditional steps.
 
