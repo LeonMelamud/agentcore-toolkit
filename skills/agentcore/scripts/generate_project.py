@@ -195,6 +195,54 @@ def copy_tree(src: Path, dst: Path) -> None:
     shutil.copytree(src, dst)
 
 
+def prompt_to_agent(prompt: dict[str, Any]) -> dict[str, Any]:
+    """Promote a repo-level instruction file (Copilot/Cursor/Claude rules, ...)
+    to a harness agent — its content becomes the system prompt.
+
+    Without this, prompts are silently dropped by generation: an instruction-only
+    repo would migrate to an empty project. Harness-first says persona +
+    instructions → harness. The scanner stores only a 500-char preview, so read
+    the full file from source_file (preview fallback if it's gone).
+    """
+    source = Path(prompt.get("source_file", ""))
+    body = (
+        source.read_text(encoding="utf-8", errors="replace")
+        if source.is_file()
+        else prompt.get("content_preview", "")
+    )
+    tool = prompt.get("source_tool", "instructions")
+    return {
+        "name": prompt.get("name", "instructions"),
+        "body": body,
+        "persona": {},
+        "source_file": prompt.get("source_file", ""),
+        "description": f"Harness seeded from {tool} instructions",
+    }
+
+
+def promote_prompts_to_agents(inventory: dict[str, Any]) -> int:
+    """Fold instruction-file prompts into agents[] as harnesses. Returns count.
+
+    Existing agents (and already-promoted prompts) win on name collision, so a
+    repo with real agents plus a stray .cursorrules doesn't get a shadow harness.
+    """
+    prompts = inventory.get("prompts", [])
+    if not prompts:
+        return 0
+    agents = inventory.setdefault("agents", [])
+    seen = {slugify(a.get("name", "")) for a in agents}
+    promoted = 0
+    for p in prompts:
+        slug = slugify(p.get("name", ""))
+        if slug in seen:
+            continue
+        seen.add(slug)
+        agents.append(prompt_to_agent(p))
+        promoted += 1
+    inventory["prompts"] = []
+    return promoted
+
+
 # ---------------------------------------------------------------------------
 # Harness generators (declarative agents)
 # ---------------------------------------------------------------------------
@@ -748,6 +796,11 @@ def main() -> None:
 
     inventory = json.loads(inv_path.read_text())
     repo_root = Path(inventory.get("repo_root", ".")).resolve()
+    # Harness-first: fold instruction files (copilot-instructions, .cursorrules,
+    # CLAUDE.md, ...) into agents[] before generation, else they're dropped.
+    n_promoted = promote_prompts_to_agents(inventory)
+    if n_promoted:
+        print(f"ℹ️  Promoted {n_promoted} instruction file(s) to harness agent(s).")
     out_dir = Path(args.output_dir)
     # Clean output dir for idempotent re-runs
     if out_dir.exists():

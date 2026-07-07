@@ -10,6 +10,7 @@ A **harness** is a fully managed, declaratively configured agent (see `harness.m
 |---|---|---|
 | `.agent.md` (persona + body), simple | Harness | `agentcore.json → harnesses[]` + `app/<name>/harness.json` + `system-prompt.md` |
 | `.agent.md` whose body references an existing bundled script (`.github/scripts/*.{sh,py}`) | Runtime agent | `agentcore.json → runtimes[]` + `app/<name>/main.py` |
+| Repo-level instruction/rule file (`copilot-instructions.md`, `.cursorrules`, `.cursor/rules`, `CLAUDE.md`, ...) | Harness (content → system prompt) | `harnesses[]` + `app/<name>/harness.json` + `system-prompt.md` — promoted so ambient instructions aren't dropped; prune if redundant with a real agent |
 | Skill (SKILL.md dir) | Harness `skills[]` (path/s3/git) or code agent `skills/` dir | `harness.json → skills[]` |
 | MCP server config | Harness `remote_mcp` tool, or Gateway target | `harness.json → tools[]` / `agentCoreGateways[]` |
 | Secret env vars | Identity credential (or Secrets Manager ARN reference) | `credentials[]` |
